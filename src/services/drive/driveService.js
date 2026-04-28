@@ -9,6 +9,7 @@ async function getOrCreateFolder(name, parentId) {
     q: `name='${name}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
     fields: 'files(id,name)',
     spaces: 'drive',
+    supportsAllDrives: true,
   });
   if (res.data.files.length > 0) return res.data.files[0].id;
 
@@ -19,6 +20,7 @@ async function getOrCreateFolder(name, parentId) {
       parents: [parentId],
     },
     fields: 'id',
+    supportsAllDrives: true,
   });
   logger.info(`Drive: created folder "${name}" under ${parentId}`);
   return created.data.id;
@@ -31,6 +33,7 @@ async function uploadBuffer(buffer, fileName, mimeType, folderId) {
     requestBody: { name: fileName, parents: [folderId] },
     media: { mimeType, body: stream },
     fields: 'id,webViewLink',
+    supportsAllDrives: true,
   });
   logger.info(`Drive: uploaded "${fileName}" → ${res.data.webViewLink}`);
   return { fileId: res.data.id, fileUrl: res.data.webViewLink };
@@ -46,7 +49,7 @@ async function moveFileToStoryFolder(fileId, storyName, subfolder) {
   const storyFolderId = await getOrCreateFolder(storyName, config.google.storiesFolderId);
   const subFolderId = await getOrCreateFolder(subfolder, storyFolderId);
 
-  const file = await drive.files.get({ fileId, fields: 'parents' });
+  const file = await drive.files.get({ fileId, fields: 'parents' ,supportsAllDrives: true,});
   const previousParents = (file.data.parents || []).join(',');
 
   await drive.files.update({
@@ -54,6 +57,7 @@ async function moveFileToStoryFolder(fileId, storyName, subfolder) {
     addParents: subFolderId,
     removeParents: previousParents,
     fields: 'id,parents',
+    supportsAllDrives: true,
   });
   logger.info(`Drive: moved ${fileId} → Stories/${storyName}/${subfolder}`);
   return subFolderId;
@@ -61,7 +65,7 @@ async function moveFileToStoryFolder(fileId, storyName, subfolder) {
 
 async function moveFileToMasterDump(fileId) {
   const drive = getDrive();
-  const file = await drive.files.get({ fileId, fields: 'parents' });
+  const file = await drive.files.get({ fileId, fields: 'parents',supportsAllDrives: true, });
   const previousParents = (file.data.parents || []).join(',');
 
   await drive.files.update({
@@ -69,6 +73,7 @@ async function moveFileToMasterDump(fileId) {
     addParents: config.google.masterFolderId,
     removeParents: previousParents,
     fields: 'id,parents',
+    supportsAllDrives: true,
   });
   logger.info(`Drive: moved ${fileId} back to Master_Dump`);
 }
