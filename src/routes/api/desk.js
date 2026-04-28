@@ -1,5 +1,6 @@
 const express = require('express');
 const { getNotion } = require('../../services/notion/notionClient');
+const { getDrive } = require('../../services/drive/driveClient');
 const config = require('../../config');
 const { enrichLink } = require('../../services/link/linkService');
 const { patchEmptyFields } = require('../../services/notion/notionService');
@@ -129,6 +130,60 @@ router.post('/items/:id/unfurl', async (req, res) => {
   } catch (err) {
     logger.error(`POST unfurl error: ${err.message}`);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/desk/proxy/:fileId — stream Drive file through backend (service account auth)
+router.get('/proxy/:fileId', async (req, res) => {
+  try {
+    const drive = getDrive();
+    const { fileId } = req.params;
+
+    // Fetch file metadata first to get mime type, name, size
+    // supportsAllDrives required — files live in a Shared Drive
+    const meta = await drive.files.get({
+      fileId,
+      fields: 'mimeType,name,size',
+      supportsAllDrives: true,
+    });
+
+    const mimeType = meta.data.mimeType || 'application/octet-stream';
+    const fileName = (meta.data.name || 'file').replace(/"/g, '\\"');
+    const size = parseInt(meta.data.size || '0', 10);
+
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.setHeader('Accept-Ranges', 'bytes');
+    if (size) res.setHeader('Content-Length', size);
+
+    // Handle Range requests so audio/video seeking works
+    const rangeHeader = req.headers.range;
+    if (rangeHeader && size) {
+      const [startStr, endStr] = rangeHeader.replace(/bytes=/, '').split('-');
+      const start = parseInt(startStr, 10);
+      const end = endStr ? parseInt(endStr, 10) : size - 1;
+      const chunkSize = end - start + 1;
+
+      res.statusCode = 206;
+      res.setHeader('Content-Range', `bytes ${start}-${end}/${size}`);
+      res.setHeader('Content-Length', chunkSize);
+
+      const stream = await drive.files.get(
+        { fileId, alt: 'media', supportsAllDrives: true },
+        { responseType: 'stream', headers: { Range: `bytes=${start}-${end}` } }
+      );
+      stream.data.pipe(res);
+    } else {
+      const stream = await drive.files.get(
+        { fileId, alt: 'media', supportsAllDrives: true },
+        { responseType: 'stream' }
+      );
+      stream.data.pipe(res);
+    }
+  } catch (err) {
+    logger.error(`GET /proxy/${req.params.fileId}: ${err.message}`);
+    if (!res.headersSent) res.status(404).json({ error: 'File not found or inaccessible' });
   }
 });
 
