@@ -60,7 +60,9 @@ export default function Card({ item, onMarkRead, onArchive }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const meta = getMeta(item);
-  const Icon = typeof meta.icon === 'function' ? meta.icon : null;
+  const isComponentIcon = typeof meta.icon === 'function'
+    || (meta.icon && typeof meta.icon === 'object' && '$$typeof' in meta.icon);
+  const Icon = isComponentIcon ? meta.icon : null;
 
   const url = item.link_url || item.file_url || item.notion_url;
   const displayTitle = item.og_title || item.title || '(untitled)';

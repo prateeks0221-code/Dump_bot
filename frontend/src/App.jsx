@@ -52,6 +52,34 @@ function matchesSearch(item, q) {
   return hay.includes(q.toLowerCase());
 }
 
+function normalizeDeskItem(item) {
+  const obj = item && typeof item === 'object' ? item : {};
+  const toStrOrNull = (v) => (typeof v === 'string' && v.trim() ? v : null);
+  const ts = toStrOrNull(obj.timestamp) || new Date().toISOString();
+  const rawType = toStrOrNull(obj.type) || 'unknown';
+
+  return {
+    id: toStrOrNull(obj.id) || crypto.randomUUID(),
+    title: toStrOrNull(obj.title),
+    type: rawType,
+    timestamp: ts,
+    processed: Boolean(obj.processed),
+    raw_content: toStrOrNull(obj.raw_content),
+    summary: toStrOrNull(obj.summary),
+    tags: Array.isArray(obj.tags) ? obj.tags.filter((t) => typeof t === 'string') : [],
+    file_url: toStrOrNull(obj.file_url),
+    drive_file_id: toStrOrNull(obj.drive_file_id),
+    link_kind: toStrOrNull(obj.link_kind),
+    link_url: toStrOrNull(obj.link_url),
+    og_title: toStrOrNull(obj.og_title),
+    og_description: toStrOrNull(obj.og_description),
+    og_image: toStrOrNull(obj.og_image)?.replaceAll('&amp;', '&') || null,
+    og_site: toStrOrNull(obj.og_site),
+    notion_url: toStrOrNull(obj.notion_url) || '#',
+    last_edited: toStrOrNull(obj.last_edited) || ts,
+  };
+}
+
 export default function App() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -70,7 +98,10 @@ export default function App() {
       const res = await fetch('/api/desk/items?today=true&limit=200');
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setItems(data.items || []);
+      const normalized = Array.isArray(data.items)
+        ? data.items.map(normalizeDeskItem)
+        : [];
+      setItems(normalized);
       setLastFetch(new Date());
       setError(null);
     } catch (err) {
