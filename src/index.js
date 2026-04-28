@@ -4,13 +4,18 @@ const config = require('./config');
 const logger = require('./utils/logger');
 const telegramRoutes = require('./routes/telegram');
 const healthRoutes = require('./routes/health');
+const deskRoutes = require('./routes/desk');
+const deskApiRoutes = require('./routes/api/desk');
 const { setWebhook } = require('./services/telegram/telegramClient');
 const { startPoller } = require('./services/notion/notionPoller');
 
 const app = express();
 
 app.use(express.json());
+app.use(express.static('public'));
 app.use('/telegram', telegramRoutes);
+app.use('/desk', deskRoutes);
+app.use('/api/desk', deskApiRoutes);
 app.use('/', healthRoutes);
 
 app.use((err, req, res, next) => {

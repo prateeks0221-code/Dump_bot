@@ -54,6 +54,7 @@ Drive Upload            Notion Entry
 | Storage | Google Drive API v3 (service account) |
 | Database | Notion API + `@notionhq/client` |
 | AI | OpenAI Whisper + GPT-4o-mini (optional) |
+| Desk | React + Vite + Tailwind (dark UI) |
 | Logs | Winston |
 
 ---
@@ -66,7 +67,9 @@ src/
 ├── config/index.js                 # All env vars
 ├── routes/
 │   ├── telegram.js                 # POST /telegram/webhook
-│   └── health.js                   # GET /health
+│   ├── health.js                   # GET /health
+│   ├── desk.js                     # Serves the Desk UI
+│   └── api/desk.js                 # REST API for Desk data
 ├── controllers/
 │   └── telegramController.js       # Core ingestion flow
 ├── services/
@@ -78,10 +81,14 @@ src/
 │   │   ├── notionClient.js         # SDK singleton
 │   │   ├── notionService.js        # CRUD, safe-patch, poller queries
 │   │   └── notionPoller.js         # Polling loop → Drive sync
+│   ├── link/linkService.js         # OG unfurl + link classification
 │   └── ai/aiService.js             # Whisper + GPT tagging
 └── utils/
     ├── logger.js                   # Winston
     └── fileHelpers.js              # Type detect, filename builder, subfolder router
+
+frontend/                           # React source (Vite + Tailwind)
+public/desk/                        # Built static assets (served by Express)
 ```
 
 ---
@@ -139,9 +146,61 @@ OPENAI_ENABLED=true        # set false to skip AI
 ### 3 — Run locally
 
 ```bash
+npm install
+npm run build:desk    # build the Dirty Desk UI
 npm run dev
 npx ngrok http 3000
 # set WEBHOOK_URL to the ngrok https URL → restart
+```
+
+Open the Desk at `http://localhost:3000/desk`
+
+
+---
+
+## Dirty Desk 🖥️
+
+A read-only dark UI to triage today's Telegram dumps. Built with React + Vite + Tailwind.
+
+### Features
+
+- **Dark theme** — `#0f0f11` background, dense card grid
+- **Zero-click preview** — thumbnails, OG unfurls, text previews, file badges
+- **Time groups** — Morning / Afternoon / Evening / Night
+- **Filter pills** — All · Links · Images · Files · Notes
+- **Real-time search** — filters across title, content, tags, type
+- **Per-card actions** — Mark read · Copy link · Open original · Archive
+- **Auto-refresh** — polls for new dumps every 60 seconds
+- **Image lightbox** — click any image thumbnail to expand
+
+### API Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/desk/items?today=true&limit=200` | Fetch today's dumps from Notion |
+| PATCH | `/api/desk/items/:id` | Mark processed / update fields |
+| POST | `/api/desk/items/:id/unfurl` | Retry OG metadata extraction |
+
+### How it works
+
+1. The Desk reads from your existing **Notion database** via the backend proxy (`/api/desk/items`)
+2. No new database — the Notion DB is the single source of truth
+3. Archive state is stored in `localStorage` (soft delete, local only)
+4. Mark-read writes back to Notion via `PATCH /api/desk/items/:id`
+
+### Running the Desk
+
+```bash
+# Development (hot reload on localhost:5173)
+cd frontend
+npm install
+npm run dev
+
+# Production build (outputs to public/desk/)
+npm run build
+
+# Or from repo root
+npm run build:desk
 ```
 
 ---
