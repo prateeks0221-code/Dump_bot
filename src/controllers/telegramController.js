@@ -2,6 +2,7 @@ const { getFileBuffer, sendMessage } = require('../services/telegram/telegramCli
 const { uploadToMasterDump } = require('../services/drive/driveService');
 const { findByMessageId, createEntry, patchEmptyFields } = require('../services/notion/notionService');
 const { transcribeAudio, generateSummaryAndTags } = require('../services/ai/aiService');
+const { enrichLink } = require('../services/link/linkService');
 const { detectMessageType, buildFileName } = require('../utils/fileHelpers');
 const logger = require('../utils/logger');
 
@@ -76,6 +77,21 @@ async function handleUpdate(req, res) {
       if (summary) aiPatch.summary = { rich_text: [{ text: { content: summary } }] };
       if (tags.length > 0) aiPatch.tags = { multi_select: tags.map((t) => ({ name: t })) };
       if (Object.keys(aiPatch).length > 0) await patchEmptyFields(notionPage.id, aiPatch);
+    }
+
+    // Link enrichment: unfurl OG metadata + classify source
+    if (type === 'link' || type === 'text') {
+      const linkData = await enrichLink(rawContent);
+      if (linkData) {
+        const linkPatch = {};
+        if (linkData.link_kind) linkPatch.link_kind = { select: { name: linkData.link_kind } };
+        if (linkData.link_url) linkPatch.link_url = { url: linkData.link_url };
+        if (linkData.og_title) linkPatch.og_title = { rich_text: [{ text: { content: linkData.og_title.slice(0, 2000) } }] };
+        if (linkData.og_description) linkPatch.og_description = { rich_text: [{ text: { content: linkData.og_description.slice(0, 2000) } }] };
+        if (linkData.og_image) linkPatch.og_image = { url: linkData.og_image };
+        if (linkData.og_site) linkPatch.og_site = { rich_text: [{ text: { content: linkData.og_site.slice(0, 200) } }] };
+        if (Object.keys(linkPatch).length > 0) await patchEmptyFields(notionPage.id, linkPatch);
+      }
     }
 
     await sendMessage(chatId, `Saved (${type}) ✓`);
