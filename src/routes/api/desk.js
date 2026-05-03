@@ -24,9 +24,10 @@ function prop(page, key, type) {
 }
 
 function normalizeItem(page) {
+  const storyRel = page.properties?.Story?.relation || page.properties?.story?.relation || [];
   return {
     id: page.id,
-    title: prop(page, 'title', 'title'),
+    title: prop(page, 'Title', 'title') || prop(page, 'title', 'title'),
     type: prop(page, 'type', 'select'),
     timestamp: prop(page, 'timestamp', 'date'),
     processed: prop(page, 'processed', 'checkbox'),
@@ -41,6 +42,7 @@ function normalizeItem(page) {
     og_description: prop(page, 'og_description', 'rich_text'),
     og_image: prop(page, 'og_image', 'url'),
     og_site: prop(page, 'og_site', 'rich_text'),
+    story_id: storyRel[0]?.id || null,
     notion_url: page.url,
     last_edited: page.last_edited_time,
   };

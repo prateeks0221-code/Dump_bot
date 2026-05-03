@@ -16,6 +16,7 @@ module.exports = {
   notion: {
     token: process.env.NOTION_TOKEN,
     databaseId: process.env.NOTION_DATABASE_ID,
+    storiesDbId: process.env.NOTION_STORIES_DB_ID,
     pollIntervalMs: parseInt(process.env.NOTION_POLL_INTERVAL_MS || '30000', 10),
   },
   openai: {
