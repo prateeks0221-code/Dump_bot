@@ -6,8 +6,8 @@ import { api } from '../lib/api';
 import { navigate } from '../lib/router';
 
 const FILTERS = [
-  { key: 'all',        label: 'All',        icon: Inbox },
   { key: 'unassigned', label: 'Unassigned', icon: Inbox },
+  { key: 'all',        label: 'All',        icon: Inbox },
   { key: 'links',      label: 'Links',      icon: Link2 },
   { key: 'images',     label: 'Images',     icon: Image },
   { key: 'files',      label: 'Files',      icon: File },
@@ -18,18 +18,6 @@ const CATEGORY_COLORS = {
   research: '#60a5fa', project: '#4ade80', reference: '#a78bfa',
   personal: '#f472b6', ops: '#fb923c',
 };
-
-function getTimeGroup(iso) {
-  const h = new Date(iso).getHours();
-  if (h >= 5 && h < 12) return 'Morning';
-  if (h >= 12 && h < 17) return 'Afternoon';
-  if (h >= 17 && h < 22) return 'Evening';
-  return 'Night';
-}
-
-function formatDateHeader(iso) {
-  return new Date(iso).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-}
 
 function matchesFilter(item, key) {
   if (key === 'all') return true;
@@ -71,7 +59,7 @@ export default function Desk() {
   const [stories, setStories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeFilter, setActiveFilter] = useState('all');
+  const [activeFilter, setActiveFilter] = useState('unassigned');
   const [search, setSearch] = useState('');
   const [lastFetch, setLastFetch] = useState(null);
   const [archivedIds, setArchivedIds] = useState(() => {
@@ -85,7 +73,7 @@ export default function Desk() {
     try {
       setLoading(true);
       const [itemsData, storiesData] = await Promise.all([
-        api.getItems({ today: true, limit: 200 }),
+        api.getItems({ today: false, limit: 200 }),
         api.listStories(),
       ]);
       setItems(Array.isArray(itemsData.items) ? itemsData.items.map(normalize) : []);
@@ -115,18 +103,6 @@ export default function Desk() {
       .filter((i) => matchesSearch(i, search));
   }, [items, activeFilter, search, archivedIds]);
 
-  const grouped = useMemo(() => {
-    const map = {};
-    for (const item of filtered) {
-      const g = getTimeGroup(item.timestamp);
-      if (!map[g]) map[g] = [];
-      map[g].push(item);
-    }
-    const order = ['Night', 'Morning', 'Afternoon', 'Evening'];
-    return order.filter((k) => map[k]).map((k) => ({ group: k, items: map[k] }));
-  }, [filtered]);
-
-  const todayStr = useMemo(() => formatDateHeader(new Date().toISOString()), []);
   const unassignedCount = useMemo(() => items.filter((i) => !i.story_id && !archivedIds.has(i.id)).length, [items, archivedIds]);
 
   const handleMarkRead = useCallback(async (id) => {
@@ -196,7 +172,7 @@ export default function Desk() {
             <div>
               <h1 className="text-sm font-semibold tracking-wide" style={{ color: '#e4e4e7' }}>Dirty Desk</h1>
               <p className="text-[11px] font-mono mt-0.5" style={{ color: '#52525b' }}>
-                {todayStr} — {filtered.length} items{unassignedCount > 0 ? ` · ${unassignedCount} unassigned` : ''}
+                {filtered.length} items{unassignedCount > 0 ? ` · ${unassignedCount} unassigned` : ''}
               </p>
             </div>
             <button onClick={fetchAll} className="p-2 rounded-lg border border-[#27272a] hover:border-[#3f3f46]" style={{ color: '#a1a1aa' }}>
@@ -273,28 +249,23 @@ export default function Desk() {
               {items.length === 0 ? 'Desk is clear.' : 'No items match your filter.'}
             </div>
           )}
-          {grouped.map(({ group, items: groupItems }) => (
-            <section key={group} className="mb-6">
-              <h2 className="text-[10px] font-mono uppercase tracking-widest mb-3 px-1" style={{ color: '#52525b' }}>
-                {group}
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {groupItems.map((item) => (
-                  <Card
-                    key={item.id}
-                    item={item}
-                    selected={selected.has(item.id)}
-                    storyName={item.story_id ? storyById[item.story_id]?.name : null}
-                    onMarkRead={handleMarkRead}
-                    onArchive={handleArchive}
-                    onAssign={handleAssignOne}
-                    onUnassign={handleUnassign}
-                    onToggleSelect={handleToggleSelect}
-                  />
-                ))}
-              </div>
-            </section>
-          ))}
+          {filtered.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {filtered.map((item) => (
+                <Card
+                  key={item.id}
+                  item={item}
+                  selected={selected.has(item.id)}
+                  storyName={item.story_id ? storyById[item.story_id]?.name : null}
+                  onMarkRead={handleMarkRead}
+                  onArchive={handleArchive}
+                  onAssign={handleAssignOne}
+                  onUnassign={handleUnassign}
+                  onToggleSelect={handleToggleSelect}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Stories sidebar */}
