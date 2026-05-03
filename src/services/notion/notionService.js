@@ -79,7 +79,7 @@ async function getRecentlyUpdatedEntries(since) {
 }
 
 function extractStoryName(page) {
-  const rel = page.properties?.story;
+  const rel = page.properties?.Story || page.properties?.story;
   if (!rel || rel.type !== 'relation' || rel.relation.length === 0) return null;
   // story name is resolved separately via page title lookup
   return rel.relation[0].id;

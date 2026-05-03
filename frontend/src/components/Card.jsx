@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import {
   ImageIcon, FileText, Link2, Music, Video, File,
   Check, Copy, ExternalLink, Trash2, Maximize2, X,
+  Layers, Unlink,
 } from 'lucide-react';
 
 /* ─── Type / kind metadata ─────────────────────────────────────── */
@@ -107,7 +108,7 @@ function looksLikeMarkdown(item) {
 }
 
 /* ─── Card component ────────────────────────────────────────────── */
-export default function Card({ item, onMarkRead, onArchive }) {
+export default function Card({ item, onMarkRead, onArchive, onAssign, onUnassign, onToggleSelect, selected, storyName }) {
   const [expanded, setExpanded]        = useState(false);
   const [showFullNote, setShowFullNote] = useState(false);
   const [copied, setCopied]            = useState(false);
@@ -178,12 +179,26 @@ export default function Card({ item, onMarkRead, onArchive }) {
   return (
     <>
       <div
+        draggable={!!onAssign}
+        onDragStart={(e) => {
+          e.dataTransfer.setData('text/x-item-id', item.id);
+          e.dataTransfer.effectAllowed = 'move';
+        }}
+        onClick={(e) => {
+          // shift-click for multi-select
+          if (e.shiftKey && onToggleSelect) {
+            e.preventDefault();
+            onToggleSelect(item.id);
+          }
+        }}
         className="group relative rounded-xl border transition-all duration-200 hover:shadow-lg"
         style={{
           backgroundColor: '#1a1a1e',
-          borderColor: isProcessed ? '#1f1f23' : '#27272a',
+          borderColor: selected ? '#60a5fa' : (isProcessed ? '#1f1f23' : '#27272a'),
           padding: '16px',
           opacity: isProcessed ? 0.5 : 1,
+          boxShadow: selected ? '0 0 0 1px #60a5fa inset' : undefined,
+          cursor: onAssign ? 'grab' : 'default',
         }}
       >
         {/* Kind accent bar */}
@@ -443,9 +458,37 @@ export default function Card({ item, onMarkRead, onArchive }) {
           {formatTime(item.timestamp)} · {relTime(item.timestamp)}
         </div>
 
+        {/* Story badge (when assigned) */}
+        {storyName && (
+          <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded border"
+            style={{ borderColor: '#60a5fa33', color: '#60a5fa', backgroundColor: '#60a5fa11' }}>
+            <Layers size={10} /> {storyName}
+          </div>
+        )}
+
         {/* Hover actions */}
         <div className="flex gap-2 mt-3 opacity-0 group-hover:opacity-100 transition-opacity flex-wrap">
-          {!isProcessed && (
+          {onAssign && (
+            <button
+              onClick={() => onAssign(item.id)}
+              className="flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-[#27272a] hover:border-[#60a5fa] hover:text-[#60a5fa] transition-colors"
+              style={{ color: '#a1a1aa' }}
+              title="Assign to story"
+            >
+              <Layers size={12} /> Assign
+            </button>
+          )}
+          {onUnassign && item.story_id && (
+            <button
+              onClick={() => onUnassign(item.id)}
+              className="flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-[#27272a] hover:border-[#fbbf24] hover:text-[#fbbf24] transition-colors"
+              style={{ color: '#a1a1aa' }}
+              title="Move back to Master_Dump"
+            >
+              <Unlink size={12} /> Unassign
+            </button>
+          )}
+          {!isProcessed && onMarkRead && (
             <button
               onClick={() => onMarkRead(item.id)}
               className="flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-[#27272a] hover:border-[#4ade80] hover:text-[#4ade80] transition-colors"
@@ -469,13 +512,15 @@ export default function Card({ item, onMarkRead, onArchive }) {
           >
             <ExternalLink size={12} /> Open
           </button>
-          <button
-            onClick={() => onArchive(item.id)}
-            className="flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-[#27272a] hover:border-[#ef4444] hover:text-[#ef4444] transition-colors"
-            style={{ color: '#a1a1aa' }}
-          >
-            <Trash2 size={12} />
-          </button>
+          {onArchive && (
+            <button
+              onClick={() => onArchive(item.id)}
+              className="flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-[#27272a] hover:border-[#ef4444] hover:text-[#ef4444] transition-colors"
+              style={{ color: '#a1a1aa' }}
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
         </div>
       </div>
 
