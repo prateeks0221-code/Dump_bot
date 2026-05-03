@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, RotateCw, Inbox, Image, FileText, Link2, File, Layers, X } from 'lucide-react';
+import { Search, RotateCw, Inbox, Image, FileText, Link2, File, Layers, X, Grid3x3 } from 'lucide-react';
 import Card from '../components/Card';
 import AssignModal from '../components/AssignModal';
 import { api } from '../lib/api';
@@ -7,7 +7,6 @@ import { navigate } from '../lib/router';
 
 const FILTERS = [
   { key: 'all',        label: 'All',        icon: Inbox },
-  { key: 'unassigned', label: 'Unassigned', icon: Inbox },
   { key: 'links',      label: 'Links',      icon: Link2 },
   { key: 'images',     label: 'Images',     icon: Image },
   { key: 'files',      label: 'Files',      icon: File },
@@ -33,7 +32,6 @@ function formatDateHeader(iso) {
 
 function matchesFilter(item, key) {
   if (key === 'all') return true;
-  if (key === 'unassigned') return !item.story_id;
   if (key === 'links') return item.type === 'link' || !!item.link_kind;
   if (key === 'images') return item.type === 'image';
   if (key === 'files') return item.type === 'file' || item.type === 'audio' || item.type === 'video';
@@ -74,6 +72,7 @@ export default function Desk() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [lastFetch, setLastFetch] = useState(null);
+  const [viewMode, setViewMode] = useState('all'); // 'all' or 'stories'
   const [archivedIds, setArchivedIds] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem('desk-archived') || '[]')); }
     catch { return new Set(); }
@@ -85,7 +84,7 @@ export default function Desk() {
     try {
       setLoading(true);
       const [itemsData, storiesData] = await Promise.all([
-        api.getItems({ today: true, limit: 200 }),
+        api.getItems({ unassignedOnly: true, limit: 200 }),
         api.listStories(),
       ]);
       setItems(Array.isArray(itemsData.items) ? itemsData.items.map(normalize) : []);
@@ -190,20 +189,52 @@ export default function Desk() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b" style={{ backgroundColor: 'rgba(15,15,17,0.95)', borderColor: '#27272a', backdropFilter: 'blur(8px)' }}>
-        <div className="max-w-[1100px] mx-auto px-4 py-3">
-          <div className="flex items-center justify-between mb-3">
+      <header className="sticky top-0 z-40 border-b" style={{ backgroundColor: 'rgba(15,15,17,0.98)', borderColor: '#27272a', backdropFilter: 'blur(10px)' }}>
+        <div className="max-w-[1100px] mx-auto px-4 py-4">
+          {/* Title & View Mode Tabs */}
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-sm font-semibold tracking-wide" style={{ color: '#e4e4e7' }}>Dirty Desk</h1>
-              <p className="text-[11px] font-mono mt-0.5" style={{ color: '#52525b' }}>
-                {todayStr} — {filtered.length} items{unassignedCount > 0 ? ` · ${unassignedCount} unassigned` : ''}
+              <div className="flex items-center gap-3 mb-2">
+                <h1 className="text-sm font-semibold tracking-wide" style={{ color: '#e4e4e7' }}>Dirty Desk</h1>
+                <div className="flex gap-1 border-l border-[#27272a] pl-3">
+                  <button
+                    onClick={() => setViewMode('all')}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all"
+                    style={{
+                      borderColor: viewMode === 'all' ? '#60a5fa' : 'transparent',
+                      color: viewMode === 'all' ? '#60a5fa' : '#a1a1aa',
+                      backgroundColor: viewMode === 'all' ? '#60a5fa11' : 'transparent',
+                      border: viewMode === 'all' ? '1px solid #60a5fa' : '1px solid transparent',
+                    }}
+                  >
+                    <Grid3x3 size={13} />
+                    All Dumps
+                  </button>
+                  <button
+                    onClick={() => setViewMode('unassigned')}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all"
+                    style={{
+                      borderColor: viewMode === 'unassigned' ? '#f97316' : 'transparent',
+                      color: viewMode === 'unassigned' ? '#f97316' : '#a1a1aa',
+                      backgroundColor: viewMode === 'unassigned' ? '#f9731611' : 'transparent',
+                      border: viewMode === 'unassigned' ? '1px solid #f97316' : '1px solid transparent',
+                    }}
+                  >
+                    <Inbox size={13} />
+                    Unassigned
+                  </button>
+                </div>
+              </div>
+              <p className="text-[10px] font-mono" style={{ color: '#52525b' }}>
+                {todayStr} • {filtered.length} items
               </p>
             </div>
-            <button onClick={fetchAll} className="p-2 rounded-lg border border-[#27272a] hover:border-[#3f3f46]" style={{ color: '#a1a1aa' }}>
+            <button onClick={fetchAll} className="p-2 rounded-lg border border-[#27272a] hover:border-[#3f3f46] transition-colors" style={{ color: '#a1a1aa' }}>
               <RotateCw size={14} className={loading ? 'animate-spin' : ''} />
             </button>
           </div>
 
+          {/* Search + Filters */}
           <div className="flex flex-col sm:flex-row gap-2.5">
             <div className="relative flex-1">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: '#52525b' }} />
@@ -219,11 +250,11 @@ export default function Desk() {
                 const active = activeFilter === key;
                 return (
                   <button key={key} onClick={() => setActiveFilter(key)}
-                    className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg border transition-colors"
+                    className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg border transition-all"
                     style={{
                       borderColor: active ? '#60a5fa' : '#27272a',
                       color: active ? '#60a5fa' : '#a1a1aa',
-                      backgroundColor: active ? 'rgba(96,165,250,0.08)' : 'transparent',
+                      backgroundColor: active ? '#60a5fa08' : 'transparent',
                     }}>
                     <Icon size={12} />
                     <span className="hidden sm:inline">{label}</span>
@@ -274,8 +305,8 @@ export default function Desk() {
             </div>
           )}
           {grouped.map(({ group, items: groupItems }) => (
-            <section key={group} className="mb-6">
-              <h2 className="text-[10px] font-mono uppercase tracking-widest mb-3 px-1" style={{ color: '#52525b' }}>
+            <section key={group} className="mb-8">
+              <h2 className="text-[10px] font-mono uppercase tracking-widest mb-3 px-1 text-[#3f3f46]">
                 {group}
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -305,17 +336,17 @@ export default function Desk() {
                 Stories ({stories.length})
               </h2>
               <button onClick={() => navigate('/stories')}
-                className="text-[10px] font-mono hover:underline" style={{ color: '#60a5fa' }}>
+                className="text-[10px] font-mono hover:underline transition-colors" style={{ color: '#60a5fa' }}>
                 View all →
               </button>
             </div>
             <p className="text-[10px] font-mono mb-2" style={{ color: '#3f3f46' }}>
-              drop card on chip to assign
+              drop to assign
             </p>
             <div className="flex flex-col gap-1.5 max-h-[70vh] overflow-y-auto pr-1">
               {stories.length === 0 && (
                 <div className="text-[11px] font-mono py-3" style={{ color: '#52525b' }}>
-                  No stories yet. Click "Assign" on a card to create one.
+                  No stories yet.
                 </div>
               )}
               {stories.map((s) => {
@@ -327,7 +358,7 @@ export default function Desk() {
                     onDragOver={(e) => onChipDragOver(e, c)}
                     onDragLeave={onChipDragLeave}
                     onDrop={(e) => onChipDrop(e, s.id)}
-                    className="group cursor-pointer rounded-lg border px-2.5 py-1.5 transition-colors"
+                    className="group cursor-pointer rounded-lg border px-2.5 py-1.5 transition-all hover:border-current"
                     style={{ borderColor: '#27272a' }}
                   >
                     <div className="flex items-center gap-2">
