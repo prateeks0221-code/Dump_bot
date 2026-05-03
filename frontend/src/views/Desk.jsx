@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, RotateCw, Inbox, Image, FileText, Link2, File, Layers, X, Grid3x3, BookOpen } from 'lucide-react';
+import { Search, RotateCw, Inbox, Image, FileText, Link2, File, Layers, X, Grid3x3 } from 'lucide-react';
 import Card from '../components/Card';
 import AssignModal from '../components/AssignModal';
 import { api } from '../lib/api';
@@ -211,17 +211,17 @@ export default function Desk() {
                     All Dumps
                   </button>
                   <button
-                    onClick={() => { setViewMode('stories'); navigate('/stories'); }}
+                    onClick={() => setViewMode('unassigned')}
                     className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all"
                     style={{
-                      borderColor: viewMode === 'stories' ? '#4ade80' : 'transparent',
-                      color: viewMode === 'stories' ? '#4ade80' : '#a1a1aa',
-                      backgroundColor: viewMode === 'stories' ? '#4ade8011' : 'transparent',
-                      border: viewMode === 'stories' ? '1px solid #4ade80' : '1px solid transparent',
+                      borderColor: viewMode === 'unassigned' ? '#f97316' : 'transparent',
+                      color: viewMode === 'unassigned' ? '#f97316' : '#a1a1aa',
+                      backgroundColor: viewMode === 'unassigned' ? '#f9731611' : 'transparent',
+                      border: viewMode === 'unassigned' ? '1px solid #f97316' : '1px solid transparent',
                     }}
                   >
-                    <BookOpen size={13} />
-                    Stories
+                    <Inbox size={13} />
+                    Unassigned
                   </button>
                 </div>
               </div>

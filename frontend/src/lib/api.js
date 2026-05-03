@@ -19,8 +19,8 @@ async function jsend(method, url, body) {
 
 export const api = {
   // Desk
-  getItems:   ({ today = true, limit = 200, processed = false } = {}) =>
-    jget(`/api/desk/items?today=${today}&limit=${limit}&processed=${processed}`),
+  getItems:   ({ unassignedOnly = false, limit = 200, processed = false } = {}) =>
+    jget(`/api/desk/items?unassignedOnly=${unassignedOnly}&limit=${limit}&processed=${processed}`),
   patchItem:  (id, body) => jsend('PATCH', `/api/desk/items/${id}`, body),
 
   // Stories
