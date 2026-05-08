@@ -3,6 +3,7 @@ const { uploadToMasterDump } = require('../services/drive/driveService');
 const { findByMessageId, createEntry, patchEmptyFields } = require('../services/notion/notionService');
 const { transcribeAudio, generateSummaryAndTags } = require('../services/ai/aiService');
 const { enrichLink } = require('../services/link/linkService');
+const { extractReel, isReelUrl } = require('../services/extraction/reelExtractor');
 const { detectMessageType, buildFileName } = require('../utils/fileHelpers');
 const logger = require('../utils/logger');
 
@@ -91,6 +92,12 @@ async function handleUpdate(req, res) {
         if (linkData.og_image) linkPatch.og_image = { url: linkData.og_image };
         if (linkData.og_site) linkPatch.og_site = { rich_text: [{ text: { content: linkData.og_site.slice(0, 200) } }] };
         if (Object.keys(linkPatch).length > 0) await patchEmptyFields(notionPage.id, linkPatch);
+
+        // Fire-and-forget reel extraction for video links
+        if (isReelUrl(linkData?.link_kind)) {
+          extractReel(linkData.link_url, notionPage.id)
+            .catch((err) => logger.error(`reelExtractor failed for ${linkData.link_url}: ${err.message}`));
+        }
       }
     }
 

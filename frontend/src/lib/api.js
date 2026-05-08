@@ -33,4 +33,8 @@ export const api = {
   refreshStory: (id) => jsend('POST', `/api/stories/${id}/refresh`),
   assign:      (storyId, itemId) => jsend('POST', `/api/stories/${storyId}/assign`, { itemId }),
   unassign:    (itemId) => jsend('POST', `/api/stories/unassign`, { itemId }),
+
+  // Wall
+  getWall:      () => jget('/api/wall'),
+  toggleBasket: (id, in_basket) => jsend('PATCH', `/api/wall/${id}/basket`, { in_basket }),
 };

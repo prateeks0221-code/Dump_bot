@@ -1,4 +1,4 @@
-import { Inbox, Layers } from 'lucide-react';
+import { Inbox, Layers, LayoutGrid } from 'lucide-react';
 import { useRoute, navigate } from '../lib/router';
 
 export default function Nav() {
@@ -6,6 +6,7 @@ export default function Nav() {
   const tabs = [
     { path: '/desk',    label: 'Dirty Desk', icon: Inbox },
     { path: '/stories', label: 'Stories',    icon: Layers },
+    { path: '/wall',    label: 'The Wall',   icon: LayoutGrid },
   ];
   const active = route.path;
 

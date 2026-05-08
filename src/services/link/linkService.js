@@ -6,6 +6,7 @@ const KIND_RULES = [
   [/github\.com/, 'github'],
   [/youtube\.com|youtu\.be/, 'youtube'],
   [/instagram\.com/, 'instagram'],
+  [/tiktok\.com/, 'tiktok'],
   [/reddit\.com/, 'reddit'],
   [/linkedin\.com/, 'linkedin'],
   [/medium\.com|substack\.com/, 'article'],

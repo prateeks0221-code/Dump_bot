@@ -2,6 +2,7 @@ import Nav from './components/Nav';
 import Desk from './views/Desk';
 import Stories from './views/Stories';
 import StoryDesk from './views/StoryDesk';
+import Wall from './views/Wall';
 import { useRoute } from './lib/router';
 
 export default function App() {
@@ -10,6 +11,7 @@ export default function App() {
   let view;
   if (path === '/stories' && id) view = <StoryDesk storyId={id} />;
   else if (path === '/stories') view = <Stories />;
+  else if (path === '/wall') view = <Wall />;
   else view = <Desk />;
 
   return (
