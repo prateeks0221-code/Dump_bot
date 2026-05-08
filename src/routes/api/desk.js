@@ -43,6 +43,7 @@ function normalizeItem(page) {
     og_site: prop(page, 'og_site', 'rich_text'),
     notion_url: page.url,
     last_edited: page.last_edited_time,
+    intelligence_status: prop(page, 'intelligence_status', 'select') || 'completed',
   };
 }
 
@@ -184,6 +185,19 @@ router.get('/proxy/:fileId', async (req, res) => {
   } catch (err) {
     logger.error(`GET /proxy/${req.params.fileId}: ${err.message}`);
     if (!res.headersSent) res.status(404).json({ error: 'File not found or inaccessible' });
+  }
+});
+
+// GET /api/desk/items/:id/intelligence
+router.get('/items/:id/intelligence', async (req, res) => {
+  try {
+    const intelligenceStore = require('../../utils/intelligenceStore');
+    const data = intelligenceStore.load(req.params.id);
+    if (!data) return res.status(404).json({ error: 'Intelligence not found' });
+    res.json(data);
+  } catch (err) {
+    logger.error(`GET intelligence error: ${err.message}`);
+    res.status(500).json({ error: err.message });
   }
 });
 

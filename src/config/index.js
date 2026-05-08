@@ -22,4 +22,8 @@ module.exports = {
     apiKey: process.env.OPENAI_API_KEY,
     enabled: process.env.OPENAI_ENABLED === 'true',
   },
+  media: {
+    sttServiceUrl: process.env.STT_SERVICE_URL || 'http://localhost:8000',
+    maxUploadSizeMb: parseInt(process.env.MAX_UPLOAD_MB || '500', 10),
+  },
 };

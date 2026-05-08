@@ -1,8 +1,10 @@
 import { useState, useCallback } from 'react';
 import {
   ImageIcon, FileText, Link2, Music, Video, File,
-  Check, Copy, ExternalLink, Trash2, Maximize2, X,
+  Check, Copy, ExternalLink, Trash2, Maximize2, X, Loader2,
+  BrainCircuit, ChevronDown, ChevronUp,
 } from 'lucide-react';
+import IntelligencePanel from './IntelligencePanel';
 
 /* ─── Type / kind metadata ─────────────────────────────────────── */
 const TYPE_META = {
@@ -14,6 +16,7 @@ const TYPE_META = {
   link:    { icon: Link2,     color: '#999999', label: 'Link' },
   text:    { icon: FileText,  color: '#aaddff', label: 'Text' },
   unknown: { icon: File,      color: '#666666', label: 'Unknown' },
+  media_intelligence: { icon: BrainCircuit, color: '#60a5fa', label: 'Intelligence' },
 };
 
 const KIND_META = {
@@ -111,6 +114,7 @@ export default function Card({ item, onMarkRead, onArchive }) {
   const [expanded, setExpanded]        = useState(false);
   const [showFullNote, setShowFullNote] = useState(false);
   const [copied, setCopied]            = useState(false);
+  const [showIntelligence, setShowIntelligence] = useState(false);
 
   const meta = getMeta(item);
   const isComponentIcon =
@@ -138,6 +142,7 @@ export default function Card({ item, onMarkRead, onArchive }) {
   const isTwitter   = Boolean(tweetId)      || item.link_kind === 'twitter';
   const isInstagram = Boolean(instagramId)  || item.link_kind === 'instagram';
   const isLinkedIn  = item.link_kind === 'linkedin';
+  const isMediaIntelligence = item.type === 'media_intelligence';
 
   /* media URLs — Drive content always via proxy */
   const proxyUrl    = driveProxy(item.drive_file_id);
@@ -174,6 +179,8 @@ export default function Card({ item, onMarkRead, onArchive }) {
     const url = item.link_url || item.file_url || item.notion_url;
     if (url) window.open(url, '_blank');
   }, [item]);
+
+  const isProcessing = item.raw_content === 'Processing...';
 
   return (
     <>
@@ -435,6 +442,31 @@ export default function Card({ item, onMarkRead, onArchive }) {
                 {t}
               </span>
             ))}
+          </div>
+        )}
+
+        {/* Media Intelligence Toggle */}
+        {isMediaIntelligence && (
+          <div className="mt-3">
+            <button
+              onClick={() => setShowIntelligence((v) => !v)}
+              className="flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded border transition-colors w-full"
+              style={{
+                borderColor: showIntelligence ? '#60a5fa' : '#27272a',
+                color: showIntelligence ? '#60a5fa' : '#a1a1aa',
+                backgroundColor: showIntelligence ? 'rgba(96,165,250,0.08)' : 'transparent',
+              }}
+            >
+              <BrainCircuit size={13} />
+              <span>{isProcessing ? 'Processing Intelligence...' : (showIntelligence ? 'Hide Analysis' : 'View Analysis')}</span>
+              {isProcessing && <Loader2 size={12} className="animate-spin ml-auto" />}
+              {!isProcessing && (showIntelligence ? <ChevronUp size={12} className="ml-auto" /> : <ChevronDown size={12} className="ml-auto" />)}
+            </button>
+            {showIntelligence && (
+              <div className="mt-2 border rounded-lg p-3" style={{ borderColor: '#27272a', backgroundColor: '#0f0f11' }}>
+                <IntelligencePanel pageId={item.id} />
+              </div>
+            )}
           </div>
         )}
 

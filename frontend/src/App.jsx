@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, RotateCw, Archive, Inbox, Image, FileText, Link2, File } from 'lucide-react';
+import { Search, RotateCw, Archive, Inbox, Image, FileText, Link2, File, BrainCircuit } from 'lucide-react';
 import Card from './components/Card';
+import MediaIntelligenceModal from './components/MediaIntelligenceModal';
 
 const FILTERS = [
   { key: 'all',    label: 'All',    icon: Inbox },
@@ -91,6 +92,7 @@ export default function App() {
     try { return new Set(JSON.parse(localStorage.getItem('desk-archived') || '[]')); }
     catch { return new Set(); }
   });
+  const [showMediaModal, setShowMediaModal] = useState(false);
 
   const fetchItems = useCallback(async () => {
     try {
@@ -162,6 +164,10 @@ export default function App() {
 
   const unreadCount = useMemo(() => items.filter((i) => !i.processed && !archivedIds.has(i.id)).length, [items, archivedIds]);
 
+  const handleMediaSuccess = useCallback(() => {
+    setTimeout(() => fetchItems(), 2000);
+  }, [fetchItems]);
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#0f0f11' }}>
       {/* Sticky Header */}
@@ -176,6 +182,19 @@ export default function App() {
                 {todayStr} — {filtered.length} items{unreadCount > 0 ? ` · ${unreadCount} unread` : ''}
               </p>
             </div>
+            <button
+              onClick={() => setShowMediaModal(true)}
+              className="flex items-center gap-1.5 text-[11px] px-3 py-2 rounded-lg border transition-colors"
+              style={{
+                borderColor: '#27272a',
+                color: '#60a5fa',
+                backgroundColor: 'rgba(96,165,250,0.08)',
+              }}
+              title="Media Intelligence"
+            >
+              <BrainCircuit size={14} />
+              <span className="hidden sm:inline">Media Intel</span>
+            </button>
             <button
               onClick={fetchItems}
               className="p-2 rounded-lg border border-[#27272a] hover:border-[#3f3f46] transition-colors"
@@ -268,6 +287,13 @@ export default function App() {
           </section>
         ))}
       </main>
+
+      {showMediaModal && (
+        <MediaIntelligenceModal
+          onClose={() => setShowMediaModal(false)}
+          onSuccess={handleMediaSuccess}
+        />
+      )}
 
       {/* Footer */}
       <footer className="max-w-[800px] mx-auto px-4 py-6 text-center">

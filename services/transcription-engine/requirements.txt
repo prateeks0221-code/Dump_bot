@@ -1,0 +1,26 @@
+# Faster-Whisper + Cortex Intelligence Engine
+# Target: Python 3.9+
+
+# Core transcription
+faster-whisper>=1.0.0
+numpy
+
+# Web framework
+fastapi>=0.100.0
+uvicorn[standard]>=0.20.0
+python-multipart
+
+# HTTP / LLM
+httpx>=0.24.0
+
+# Processing
+nltk
+
+# URL downloading (YouTube, Instagram, direct)
+yt-dlp>=2024.4.9
+
+# Optional GPU detection
+torch
+
+# Utils
+tqdm
