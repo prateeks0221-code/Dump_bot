@@ -44,6 +44,10 @@ const NEW_FIELDS = {
   },
   position_x: { number: { format: 'number' } },
   position_y: { number: { format: 'number' } },
+  // extraction pipeline fields
+  source_url:   { url: {} },
+  wiki_page_id: { rich_text: {} },
+  in_basket:    { checkbox: {} },
 };
 
 async function main() {
