@@ -18,18 +18,6 @@ const CATEGORY_COLORS = {
   personal: '#f472b6', ops: '#fb923c',
 };
 
-function getTimeGroup(iso) {
-  const h = new Date(iso).getHours();
-  if (h >= 5 && h < 12) return 'Morning';
-  if (h >= 12 && h < 17) return 'Afternoon';
-  if (h >= 17 && h < 22) return 'Evening';
-  return 'Night';
-}
-
-function formatDateHeader(iso) {
-  return new Date(iso).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-}
-
 function matchesFilter(item, key) {
   if (key === 'all') return true;
   if (key === 'links') return item.type === 'link' || !!item.link_kind;
@@ -69,7 +57,7 @@ export default function Desk() {
   const [stories, setStories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeFilter, setActiveFilter] = useState('all');
+  const [activeFilter, setActiveFilter] = useState('unassigned');
   const [search, setSearch] = useState('');
   const [lastFetch, setLastFetch] = useState(null);
   const [viewMode, setViewMode] = useState('all'); // 'all' or 'stories'
@@ -85,6 +73,7 @@ export default function Desk() {
       setLoading(true);
       const [itemsData, storiesData] = await Promise.all([
         api.getItems({ unassignedOnly: true, limit: 200 }),
+
         api.listStories(),
       ]);
       setItems(Array.isArray(itemsData.items) ? itemsData.items.map(normalize) : []);
@@ -114,18 +103,6 @@ export default function Desk() {
       .filter((i) => matchesSearch(i, search));
   }, [items, activeFilter, search, archivedIds]);
 
-  const grouped = useMemo(() => {
-    const map = {};
-    for (const item of filtered) {
-      const g = getTimeGroup(item.timestamp);
-      if (!map[g]) map[g] = [];
-      map[g].push(item);
-    }
-    const order = ['Night', 'Morning', 'Afternoon', 'Evening'];
-    return order.filter((k) => map[k]).map((k) => ({ group: k, items: map[k] }));
-  }, [filtered]);
-
-  const todayStr = useMemo(() => formatDateHeader(new Date().toISOString()), []);
   const unassignedCount = useMemo(() => items.filter((i) => !i.story_id && !archivedIds.has(i.id)).length, [items, archivedIds]);
 
   const handleMarkRead = useCallback(async (id) => {
@@ -227,6 +204,7 @@ export default function Desk() {
               </div>
               <p className="text-[10px] font-mono" style={{ color: '#52525b' }}>
                 {todayStr} • {filtered.length} items
+ 
               </p>
             </div>
             <button onClick={fetchAll} className="p-2 rounded-lg border border-[#27272a] hover:border-[#3f3f46] transition-colors" style={{ color: '#a1a1aa' }}>
@@ -326,6 +304,7 @@ export default function Desk() {
               </div>
             </section>
           ))}
+
         </div>
 
         {/* Stories sidebar */}
