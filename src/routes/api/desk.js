@@ -48,22 +48,24 @@ function normalizeItem(page) {
   };
 }
 
-// GET /api/desk/items?processed=false&limit=100&unassignedOnly=false
+// GET /api/desk/items?processed=false&limit=100&today=true
 router.get('/items', async (req, res) => {
   try {
     const notion = getNotion();
     const showProcessed = req.query.processed === 'true';
-    const unassignedOnly = req.query.unassignedOnly === 'true';
+    const todayOnly = req.query.today === 'true';
     const limit = Math.min(parseInt(req.query.limit || '100', 10), 200);
 
     const filters = [];
 
-    if (!showProcessed) {
+    if (!showProcessed && !todayOnly) {
       filters.push({ property: 'processed', checkbox: { equals: false } });
     }
 
-    if (unassignedOnly) {
-      filters.push({ property: 'Story', relation: { is_empty: true } });
+    if (todayOnly) {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      filters.push({ property: 'timestamp', date: { on_or_after: d.toISOString() } });
     }
 
     const filter = filters.length > 1
