@@ -1,4 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   ImageIcon, FileText, Link2, Music, Video, File,
   Check, Copy, ExternalLink, Trash2, Maximize2, X,
@@ -109,9 +111,12 @@ function looksLikeMarkdown(item) {
 
 /* ─── Card component ────────────────────────────────────────────── */
 export default function Card({ item, onMarkRead, onArchive, onAssign, onUnassign, onToggleSelect, selected, storyName }) {
-  const [expanded, setExpanded]        = useState(false);
+  const [previewOpen, setPreviewOpen]  = useState(false);
   const [showFullNote, setShowFullNote] = useState(false);
   const [copied, setCopied]            = useState(false);
+  const [audioRate, setAudioRate]      = useState(1);
+  const inlineAudioRef                 = useRef(null);
+  const previewAudioRef                = useRef(null);
 
   const meta = getMeta(item);
   const isComponentIcon =
@@ -153,12 +158,15 @@ export default function Card({ item, onMarkRead, onArchive, onAssign, onUnassign
   const hasRichMedia =
     isImage || isInstagram || isYoutube || isTwitter ||
     isPdf   || isAudio     || isVideo   || Boolean(docPreview);
+  const hasInteractivePreview =
+    isImage || isAudio || isVideo || isPdf || Boolean(docPreview) || isMarkdown || isLinkedIn;
 
   /* display strings */
   const displayTitle = item.og_title || item.title || '(untitled)';
   const desc         = item.og_description || item.summary || '';
   const raw          = item.raw_content || '';
   const isProcessed  = item.processed;
+  const previewMarkdown = raw || desc || item.title || '';
 
   /* actions */
   const handleCopy = useCallback(async () => {
@@ -215,11 +223,11 @@ export default function Card({ item, onMarkRead, onArchive, onAssign, onUnassign
             <img
               src={thumbUrl} alt=""
               className="w-full h-36 object-cover cursor-zoom-in"
-              onClick={() => setExpanded(true)}
+              onClick={() => setPreviewOpen(true)}
               onError={(e) => { e.target.style.display = 'none'; }}
             />
             <button
-              onClick={() => setExpanded(true)}
+              onClick={() => setPreviewOpen(true)}
               className="absolute bottom-2 right-2 p-1.5 rounded-md bg-black/60 text-white/80 hover:text-white"
             >
               <Maximize2 size={14} />
@@ -287,14 +295,36 @@ export default function Card({ item, onMarkRead, onArchive, onAssign, onUnassign
                 onError={(e) => { e.target.style.display = 'none'; }}
               />
             )}
-            <div className="p-2.5 flex items-center gap-2">
-              <span className="text-[11px] font-mono shrink-0" style={{ color: '#0aa880' }}>
-                in LinkedIn
-              </span>
-              {item.og_title && (
-                <span className="text-[11px] text-[#d4d4d8] truncate">{item.og_title}</span>
+            <div className="p-2.5 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-mono shrink-0" style={{ color: '#0aa880' }}>
+                  in LinkedIn
+                </span>
+                {item.og_title && (
+                  <span className="text-[11px] text-[#d4d4d8] truncate">{item.og_title}</span>
+                )}
+              </div>
+              {!!item.link_url && (
+                <button
+                  onClick={() => setPreviewOpen(true)}
+                  className="text-[10px] font-mono px-2 py-1 rounded border border-[#0aa88055] text-[#0aa880] hover:bg-[#0aa88022] transition-colors"
+                >
+                  Preview post notes
+                </button>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Quick preview access */}
+        {hasInteractivePreview && (
+          <div className="mb-2">
+            <button
+              onClick={() => setPreviewOpen(true)}
+              className="text-[10px] font-mono px-2 py-1 rounded border border-[#3f3f46] text-[#d4d4d8] hover:border-[#60a5fa] hover:text-[#60a5fa] transition-colors"
+            >
+              Interactive preview
+            </button>
           </div>
         )}
 
@@ -302,14 +332,35 @@ export default function Card({ item, onMarkRead, onArchive, onAssign, onUnassign
         {isAudio && audioUrl && (
           <div className="mb-3 rounded-lg bg-[#0f0f11] border border-[#27272a] p-2.5">
             <audio
+              ref={inlineAudioRef}
               controls
               className="w-full h-8"
               src={audioUrl}
               preload="metadata"
               style={{ accentColor: meta.color }}
+              onLoadedMetadata={(e) => { e.currentTarget.playbackRate = audioRate; }}
             >
               Audio not supported.
             </audio>
+            <div className="mt-2 flex items-center gap-1.5">
+              {[0.75, 1, 1.25, 1.5, 2].map((rate) => (
+                <button
+                  key={rate}
+                  onClick={() => {
+                    setAudioRate(rate);
+                    if (inlineAudioRef.current) inlineAudioRef.current.playbackRate = rate;
+                    if (previewAudioRef.current) previewAudioRef.current.playbackRate = rate;
+                  }}
+                  className="text-[10px] px-1.5 py-0.5 rounded border transition-colors"
+                  style={{
+                    borderColor: audioRate === rate ? '#60a5fa' : '#3f3f46',
+                    color: audioRate === rate ? '#60a5fa' : '#a1a1aa',
+                  }}
+                >
+                  {rate}x
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -378,12 +429,40 @@ export default function Card({ item, onMarkRead, onArchive, onAssign, onUnassign
         {/* Raw text / notes / markdown */}
         {(isText || isMarkdown || (isLinkedIn && !desc)) && raw && (
           <div className="mb-2">
-            <div
-              className={`text-[11px] leading-relaxed whitespace-pre-wrap ${showFullNote ? '' : 'line-clamp-6'}`}
-              style={{ color: '#a1a1aa' }}
-            >
-              {raw}
-            </div>
+            {isMarkdown ? (
+              <div
+                className={`text-[11px] leading-relaxed rounded-md border border-[#27272a] bg-[#111216] p-2.5 ${
+                  showFullNote ? 'max-h-[420px] overflow-y-auto' : 'max-h-40 overflow-hidden'
+                }`}
+                style={{ color: '#d4d4d8' }}
+              >
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    p: ({ ...props }) => <p className="mb-2 last:mb-0" {...props} />,
+                    a: ({ ...props }) => <a className="text-[#60a5fa] hover:underline" target="_blank" rel="noreferrer" {...props} />,
+                    code: ({ inline, ...props }) =>
+                      inline
+                        ? <code className="px-1 py-0.5 rounded bg-[#0f0f11] text-[#93c5fd]" {...props} />
+                        : <code className="block p-2 rounded bg-[#0f0f11] text-[#93c5fd] overflow-x-auto" {...props} />,
+                    ul: ({ ...props }) => <ul className="list-disc ml-4 mb-2" {...props} />,
+                    ol: ({ ...props }) => <ol className="list-decimal ml-4 mb-2" {...props} />,
+                    h1: ({ ...props }) => <h1 className="text-[13px] font-semibold mb-2" {...props} />,
+                    h2: ({ ...props }) => <h2 className="text-[12px] font-semibold mb-2" {...props} />,
+                    h3: ({ ...props }) => <h3 className="text-[11px] font-semibold mb-2" {...props} />,
+                  }}
+                >
+                  {raw}
+                </ReactMarkdown>
+              </div>
+            ) : (
+              <div
+                className={`text-[11px] leading-relaxed whitespace-pre-wrap ${showFullNote ? '' : 'line-clamp-6'}`}
+                style={{ color: '#a1a1aa' }}
+              >
+                {raw}
+              </div>
+            )}
             {raw.length > 280 && (
               <button
                 onClick={() => setShowFullNote((v) => !v)}
@@ -512,6 +591,15 @@ export default function Card({ item, onMarkRead, onArchive, onAssign, onUnassign
           >
             <ExternalLink size={12} /> Open
           </button>
+          {hasInteractivePreview && (
+            <button
+              onClick={() => setPreviewOpen(true)}
+              className="flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-[#27272a] hover:border-[#60a5fa] hover:text-[#60a5fa] transition-colors"
+              style={{ color: '#a1a1aa' }}
+            >
+              <Maximize2 size={12} /> Preview
+            </button>
+          )}
           {onArchive && (
             <button
               onClick={() => onArchive(item.id)}
@@ -524,23 +612,127 @@ export default function Card({ item, onMarkRead, onArchive, onAssign, onUnassign
         </div>
       </div>
 
-      {/* Image lightbox */}
-      {expanded && thumbUrl && (
+      {/* Unified rich preview modal */}
+      {previewOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
-          onClick={() => setExpanded(false)}
+          onClick={() => setPreviewOpen(false)}
         >
           <button
             className="absolute top-4 right-4 text-white/70 hover:text-white"
-            onClick={() => setExpanded(false)}
+            onClick={() => setPreviewOpen(false)}
           >
             <X size={24} />
           </button>
-          <img
-            src={thumbUrl} alt=""
-            className="max-w-full max-h-[90vh] rounded-lg object-contain"
+          <div
+            className="w-full max-w-5xl max-h-[92vh] rounded-xl border border-[#27272a] bg-[#0f0f11] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
-          />
+          >
+            <div className="px-3 py-2 border-b border-[#27272a] flex items-center justify-between">
+              <span className="text-[11px] font-mono text-[#a1a1aa] truncate">{displayTitle}</span>
+              {(item.link_url || item.file_url || item.notion_url) && (
+                <a
+                  href={item.link_url || item.file_url || item.notion_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[10px] font-mono text-[#60a5fa] hover:underline"
+                >
+                  Open original
+                </a>
+              )}
+            </div>
+
+            <div className="p-3 max-h-[84vh] overflow-auto">
+              {isImage && thumbUrl && (
+                <img src={thumbUrl} alt="" className="w-full max-h-[80vh] rounded-lg object-contain bg-black" />
+              )}
+
+              {isAudio && audioUrl && (
+                <div className="space-y-3">
+                  <audio
+                    ref={previewAudioRef}
+                    controls
+                    autoPlay
+                    className="w-full"
+                    src={audioUrl}
+                    preload="metadata"
+                    onLoadedMetadata={(e) => { e.currentTarget.playbackRate = audioRate; }}
+                  />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-mono text-[#71717a]">Playback speed</span>
+                    {[0.75, 1, 1.25, 1.5, 2].map((rate) => (
+                      <button
+                        key={rate}
+                        onClick={() => {
+                          setAudioRate(rate);
+                          if (previewAudioRef.current) previewAudioRef.current.playbackRate = rate;
+                        }}
+                        className="text-[11px] px-2 py-1 rounded border"
+                        style={{
+                          borderColor: audioRate === rate ? '#60a5fa' : '#3f3f46',
+                          color: audioRate === rate ? '#60a5fa' : '#a1a1aa',
+                        }}
+                      >
+                        {rate}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {isVideo && videoUrl && (
+                <video controls autoPlay className="w-full max-h-[80vh] rounded-lg object-contain bg-black" src={videoUrl} preload="metadata">
+                  Video not supported.
+                </video>
+              )}
+
+              {isPdf && pdfUrl && (
+                <embed src={pdfUrl} type="application/pdf" className="w-full h-[80vh] rounded-lg" />
+              )}
+
+              {docPreview && (
+                <iframe src={docPreview} className="w-full h-[80vh] border-0 rounded-lg" title="Document preview" />
+              )}
+
+              {isMarkdown && previewMarkdown && (
+                <div className="rounded-lg border border-[#27272a] bg-[#111216] p-4 text-[#d4d4d8]">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      p: ({ ...props }) => <p className="mb-3 last:mb-0 leading-relaxed" {...props} />,
+                      a: ({ ...props }) => <a className="text-[#60a5fa] hover:underline" target="_blank" rel="noreferrer" {...props} />,
+                      code: ({ inline, ...props }) =>
+                        inline
+                          ? <code className="px-1 py-0.5 rounded bg-[#0f0f11] text-[#93c5fd]" {...props} />
+                          : <code className="block p-3 rounded bg-[#0f0f11] text-[#93c5fd] overflow-x-auto mb-3" {...props} />,
+                      ul: ({ ...props }) => <ul className="list-disc ml-5 mb-3" {...props} />,
+                      ol: ({ ...props }) => <ol className="list-decimal ml-5 mb-3" {...props} />,
+                      h1: ({ ...props }) => <h1 className="text-xl font-semibold mb-3" {...props} />,
+                      h2: ({ ...props }) => <h2 className="text-lg font-semibold mb-3" {...props} />,
+                      h3: ({ ...props }) => <h3 className="text-base font-semibold mb-2" {...props} />,
+                    }}
+                  >
+                    {previewMarkdown}
+                  </ReactMarkdown>
+                </div>
+              )}
+
+              {isLinkedIn && !isMarkdown && (
+                <div className="rounded-lg border border-[#27272a] bg-[#111216] overflow-hidden">
+                  {item.og_image && <img src={item.og_image} alt="" className="w-full max-h-[340px] object-cover" />}
+                  <div className="p-4 space-y-3">
+                    <p className="text-[11px] font-mono text-[#0aa880]">LinkedIn note</p>
+                    {item.og_title && <h4 className="text-[15px] text-[#e4e4e7]">{item.og_title}</h4>}
+                    {(raw || desc) && (
+                      <p className="text-[13px] leading-relaxed text-[#a1a1aa] whitespace-pre-wrap">
+                        {raw || desc}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </>
