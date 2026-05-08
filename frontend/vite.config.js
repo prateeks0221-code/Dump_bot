@@ -8,9 +8,4 @@ export default defineConfig({
     emptyOutDir: true,
   },
   base: '/desk/',
-  server: {
-    proxy: {
-      '/api': 'http://localhost:3000',
-    },
-  },
 })
