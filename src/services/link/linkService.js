@@ -28,16 +28,47 @@ function classifyUrl(url) {
   }
 }
 
+function decodeHtmlEntities(str) {
+  if (!str) return str;
+  return str
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&#039;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)));
+}
+
+// For Instagram/social captions that arrive as full caption text,
+// extract the first meaningful sentence (up to 120 chars).
+function cleanSocialTitle(raw) {
+  if (!raw) return null;
+  const decoded = decodeHtmlEntities(raw);
+  // Strip @handle prefix pattern "Name on Platform: "caption""
+  const withoutHandle = decoded.replace(/^.+? on \w+:\s*[""]?/i, '').replace(/[""]$/, '').trim();
+  const text = withoutHandle || decoded;
+  // First non-empty line or first sentence
+  const firstLine = text.split(/\n/)[0].trim();
+  const trimmed = firstLine.length > 10 ? firstLine : text.replace(/\n+/g, ' ').trim();
+  return trimmed.length > 120 ? trimmed.slice(0, 117) + '…' : trimmed;
+}
+
 function extractOg(html) {
   const get = (prop) => {
     const m =
       html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"'<>]+)["']`, 'i')) ||
       html.match(new RegExp(`<meta[^>]+content=["']([^"'<>]+)["'][^>]+(?:property|name)=["']${prop}["']`, 'i'));
-    return m ? m[1].trim() : null;
+    return m ? decodeHtmlEntities(m[1].trim()) : null;
   };
 
+  const rawTitle = get('og:title') || get('twitter:title') ||
+    decodeHtmlEntities(html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim()) || null;
+
   return {
-    title: get('og:title') || get('twitter:title') || html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() || null,
+    title: cleanSocialTitle(rawTitle),
     description: get('og:description') || get('twitter:description') || null,
     image: get('og:image') || get('twitter:image') || null,
     siteName: get('og:site_name') || null,
