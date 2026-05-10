@@ -18,7 +18,7 @@ async function transcribeAudio(buffer, mimeType) {
   try {
     const base64 = buffer.toString('base64');
     const result = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.0-flash-lite',
       contents: [
         {
           parts: [
@@ -42,7 +42,7 @@ async function generateSummaryAndTags(text) {
   if (!ai || !text) return { summary: null, tags: [] };
   try {
     const result = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.0-flash-lite',
       contents: [
         {
           parts: [

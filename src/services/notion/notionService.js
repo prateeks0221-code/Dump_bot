@@ -136,4 +136,12 @@ async function createWikiPage(parentPageId, title, markdownContent) {
   return page.id;
 }
 
-module.exports = { findByMessageId, createEntry, patchEmptyFields, getRecentlyUpdatedEntries, extractStoryName, getPageTitle, createWikiPage };
+// Force-write specific fields regardless of current value
+async function forceUpdateFields(pageId, updates) {
+  if (Object.keys(updates).length === 0) return;
+  const notion = getNotion();
+  await notion.pages.update({ page_id: pageId, properties: updates });
+  logger.info(`Notion: force-updated ${pageId}: ${Object.keys(updates).join(', ')}`);
+}
+
+module.exports = { findByMessageId, createEntry, patchEmptyFields, forceUpdateFields, getRecentlyUpdatedEntries, extractStoryName, getPageTitle, createWikiPage };
