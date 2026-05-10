@@ -19,8 +19,8 @@ module.exports = {
     storiesDbId: process.env.NOTION_STORIES_DB_ID,
     pollIntervalMs: parseInt(process.env.NOTION_POLL_INTERVAL_MS || '30000', 10),
   },
-  openai: {
-    apiKey: process.env.OPENAI_API_KEY,
-    enabled: process.env.OPENAI_ENABLED === 'true',
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY,
+    enabled: process.env.GEMINI_ENABLED === 'true',
   },
 };

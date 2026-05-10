@@ -1,29 +1,36 @@
-const { Readable } = require('stream');
 const config = require('../../config');
 const logger = require('../../utils/logger');
 
-let _openai = null;
+let _gemini = null;
 
-function getOpenAI() {
-  if (!config.openai.enabled || !config.openai.apiKey) return null;
-  if (_openai) return _openai;
-  const { OpenAI } = require('openai');
-  _openai = new OpenAI({ apiKey: config.openai.apiKey });
-  return _openai;
+function getGemini() {
+  if (!config.gemini.enabled || !config.gemini.apiKey) return null;
+  if (_gemini) return _gemini;
+  const { GoogleGenAI } = require('@google/genai');
+  _gemini = new GoogleGenAI({ apiKey: config.gemini.apiKey });
+  return _gemini;
 }
 
 async function transcribeAudio(buffer, mimeType) {
-  const openai = getOpenAI();
-  if (!openai) return null;
+  // Gemini supports audio inline; encode as base64
+  const ai = getGemini();
+  if (!ai) return null;
   try {
-    const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'mp4' : 'mp3';
-    const file = new File([buffer], `audio.${ext}`, { type: mimeType });
-    const res = await openai.audio.transcriptions.create({
-      model: 'whisper-1',
-      file,
+    const base64 = buffer.toString('base64');
+    const result = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: [
+        {
+          parts: [
+            { text: 'Transcribe this audio exactly as spoken. Return only the transcript text.' },
+            { inlineData: { mimeType, data: base64 } },
+          ],
+        },
+      ],
     });
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
     logger.info('AI: transcription complete');
-    return res.text;
+    return text || null;
   } catch (err) {
     logger.error(`AI: transcription failed — ${err.message}`);
     return null;
@@ -31,22 +38,24 @@ async function transcribeAudio(buffer, mimeType) {
 }
 
 async function generateSummaryAndTags(text) {
-  const openai = getOpenAI();
-  if (!openai || !text) return { summary: null, tags: [] };
+  const ai = getGemini();
+  if (!ai || !text) return { summary: null, tags: [] };
   try {
-    const res = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
+    const result = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: [
         {
-          role: 'system',
-          content:
-            'You are a personal knowledge assistant. Return JSON with keys: summary (1 sentence), tags (array of 3-5 lowercase strings).',
+          parts: [
+            {
+              text: `You are a personal knowledge assistant. Return valid JSON with keys: summary (1 sentence), tags (array of 3-5 lowercase strings).\n\n${text.slice(0, 3000)}`,
+            },
+          ],
         },
-        { role: 'user', content: text.slice(0, 3000) },
       ],
-      response_format: { type: 'json_object' },
+      generationConfig: { responseMimeType: 'application/json' },
     });
-    const parsed = JSON.parse(res.choices[0].message.content);
+    const raw = result.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+    const parsed = JSON.parse(raw);
     logger.info('AI: summary + tags generated');
     return { summary: parsed.summary || null, tags: parsed.tags || [] };
   } catch (err) {

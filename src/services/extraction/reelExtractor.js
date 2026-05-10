@@ -15,12 +15,32 @@ function isReelUrl(linkKind) {
 
 function runPython(url) {
   return new Promise((resolve, reject) => {
-    const proc = spawn('python3', [SCRIPT, url], {
+    // Railway (and some Linux envs) may only have 'python' not 'python3'
+    const pythonBin = process.platform === 'win32' ? 'python' : 'python3';
+    const proc = spawn(pythonBin, [SCRIPT, url], {
       env: { ...process.env },
       cwd: process.cwd(),
     });
     let stderr = '';
     proc.stderr.on('data', (d) => { stderr += d.toString(); });
+    proc.on('error', (err) => {
+      if (err.code === 'ENOENT') {
+        // python3 not found, try python
+        const fallback = spawn('python', [SCRIPT, url], {
+          env: { ...process.env },
+          cwd: process.cwd(),
+        });
+        let stderr2 = '';
+        fallback.stderr.on('data', (d) => { stderr2 += d.toString(); });
+        fallback.on('error', (e) => reject(new Error(`Python not found: ${e.message}`)));
+        fallback.on('close', (code) => {
+          if (code !== 0) reject(new Error(`reel_to_wiki.py exited ${code}: ${stderr2.slice(-500)}`));
+          else resolve();
+        });
+      } else {
+        reject(err);
+      }
+    });
     proc.on('close', (code) => {
       if (code !== 0) reject(new Error(`reel_to_wiki.py exited ${code}: ${stderr.slice(-500)}`));
       else resolve();

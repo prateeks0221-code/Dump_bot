@@ -16,7 +16,7 @@
     "nanoid": "^3.3.7",
     "node-fetch": "^2.7.0",
     "@notionhq/client": "^2.2.15",
-    "openai": "^4.52.1",
+    "@google/genai": "^1.0.0",
     "winston": "^3.13.0",
     "dotenv": "^16.4.5"
 

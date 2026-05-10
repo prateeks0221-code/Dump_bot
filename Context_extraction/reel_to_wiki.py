@@ -104,9 +104,9 @@ def get_metadata(url: str) -> dict:
     return {"title": "Unknown", "uploader": "Unknown"}
 
 def generate_summary(transcript: str, metadata: dict) -> str:
-    """Generate concise summary via Claude API"""
+    """Generate concise summary via Gemini API"""
     print("[4/5] Generating summary...")
-    
+
     prompt = f"""Given this reel transcript, create a super concise 3-5 line summary with all key points.
 
 Metadata:
@@ -118,22 +118,17 @@ Transcript:
 
 Summary (3-5 lines, dense info):"""
 
-    # Using Claude API
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-        
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=300,
-            messages=[{"role": "user", "content": prompt}]
+        from google import genai
+        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
         )
-        
-        return message.content[0].text.strip()
-    
+        return response.text.strip()
+
     except Exception as e:
         print(f"Warning: API call failed ({e}), using basic summary")
-        # Fallback: truncate transcript
         return transcript[:500] + "..." if len(transcript) > 500 else transcript
 
 def generate_deep_analysis(transcript: str, metadata: dict, url: str) -> str:
@@ -163,17 +158,14 @@ Transcript:
 Create comprehensive markdown wiki entry:"""
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-        
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4000,
-            messages=[{"role": "user", "content": prompt}]
+        from google import genai
+        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
         )
-        
-        return message.content[0].text.strip()
-    
+        return response.text.strip()
+
     except Exception as e:
         print(f"Warning: API call failed ({e}), using basic format")
         # Fallback: basic markdown
