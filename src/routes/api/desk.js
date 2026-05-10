@@ -42,6 +42,7 @@ function normalizeItem(page) {
     og_description: prop(page, 'og_description', 'rich_text'),
     og_image: prop(page, 'og_image', 'url'),
     og_site: prop(page, 'og_site', 'rich_text'),
+    reel_links: (() => { try { return JSON.parse(prop(page, 'reel_links', 'rich_text') || '[]'); } catch { return []; } })(),
     story_id: storyRel[0]?.id || null,
     notion_url: page.url,
     last_edited: page.last_edited_time,

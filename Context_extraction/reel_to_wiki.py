@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Reel → Wiki pipeline
-Download reel → transcribe → dual output (summary + deep analysis)
+Download reel → transcribe → extract title, wiki, links via Gemini
+Output: single JSON file {title, wiki, links:[{label,url}]}
 """
 
 import os
@@ -12,83 +13,48 @@ from pathlib import Path
 import whisper
 from datetime import datetime
 
-# Config
 TEMP_DIR = Path("./temp_reels")
 OUTPUT_DIR = Path("./wiki")
-WHISPER_MODEL = "base"  # base/small/medium/large
+WHISPER_MODEL = "base"
+
 
 def setup_dirs():
-    """Create temp + output dirs"""
     TEMP_DIR.mkdir(exist_ok=True)
     OUTPUT_DIR.mkdir(exist_ok=True)
 
+
 def download_reel(url: str) -> Path:
-    """Download reel via yt-dlp"""
-    print(f"[1/5] Downloading reel...")
-    
+    print("[1/4] Downloading reel...")
     output_template = str(TEMP_DIR / "reel_%(id)s.%(ext)s")
-    
-    cmd = [
-        "yt-dlp",
-        url,
-        "-o", output_template,
-        "--format", "best",
-        "--write-info-json"
-    ]
-    
+    cmd = ["yt-dlp", url, "-o", output_template, "--format", "best", "--write-info-json"]
     result = subprocess.run(cmd, capture_output=True, text=True)
-    
     if result.returncode != 0:
         raise Exception(f"Download failed: {result.stderr}")
-    
-    # Find downloaded video file
-    video_files = list(TEMP_DIR.glob("reel_*.*"))
-    video_files = [f for f in video_files if f.suffix != ".json"]
-    
+    video_files = [f for f in TEMP_DIR.glob("reel_*.*") if f.suffix != ".json"]
     if not video_files:
         raise Exception("No video file found after download")
-    
     return video_files[0]
 
+
 def extract_audio(video_path: Path) -> Path:
-    """Extract audio from video"""
-    print("[2/5] Extracting audio...")
-    
+    print("[2/4] Extracting audio...")
     audio_path = video_path.with_suffix(".mp3")
-    
-    cmd = [
-        "ffmpeg",
-        "-i", str(video_path),
-        "-q:a", "0",
-        "-map", "a",
-        "-y",
-        str(audio_path)
-    ]
-    
+    cmd = ["ffmpeg", "-i", str(video_path), "-q:a", "0", "-map", "a", "-y", str(audio_path)]
     result = subprocess.run(cmd, capture_output=True, text=True)
-    
     if result.returncode != 0:
         raise Exception(f"Audio extraction failed: {result.stderr}")
-    
     return audio_path
 
-def transcribe_audio(audio_path: Path) -> dict:
-    """Transcribe audio with Whisper"""
-    print(f"[3/5] Transcribing (model: {WHISPER_MODEL})...")
-    
+
+def transcribe_audio(audio_path: Path) -> str:
+    print(f"[3/4] Transcribing (model: {WHISPER_MODEL})...")
     model = whisper.load_model(WHISPER_MODEL)
     result = model.transcribe(str(audio_path))
-    
-    return {
-        "text": result["text"],
-        "segments": result.get("segments", []),
-        "language": result.get("language", "unknown")
-    }
+    return result["text"]
+
 
 def get_metadata(url: str) -> dict:
-    """Get reel metadata from info.json if exists"""
     info_files = list(TEMP_DIR.glob("reel_*.info.json"))
-    
     if info_files:
         with open(info_files[0]) as f:
             data = json.load(f)
@@ -97,65 +63,32 @@ def get_metadata(url: str) -> dict:
                 "uploader": data.get("uploader", "Unknown"),
                 "description": data.get("description", ""),
                 "duration": data.get("duration", 0),
-                "upload_date": data.get("upload_date", ""),
-                "view_count": data.get("view_count", 0),
+                "thumbnail": data.get("thumbnail", ""),
             }
-    
-    return {"title": "Unknown", "uploader": "Unknown"}
+    return {"title": "Unknown", "uploader": "Unknown", "thumbnail": ""}
 
-def generate_summary(transcript: str, metadata: dict) -> str:
-    """Generate concise summary via Gemini API"""
-    print("[4/5] Generating summary...")
 
-    prompt = f"""Given this reel transcript, create a super concise 3-5 line summary with all key points.
+def generate_output(transcript: str, metadata: dict, url: str) -> dict:
+    """Single Gemini call → {title, wiki, links}"""
+    print("[4/4] Generating title, wiki, and references via Gemini...")
 
-Metadata:
-- Title: {metadata.get('title', 'Unknown')}
-- Creator: {metadata.get('uploader', 'Unknown')}
+    prompt = f"""You are analyzing a social media reel. Given the transcript and metadata below, return a JSON object with exactly these three keys:
 
-Transcript:
-{transcript}
+1. "title": A single clear sentence (max 15 words) describing what this reel is about — the core topic or insight, not a YouTube-style title.
 
-Summary (3-5 lines, dense info):"""
+2. "wiki": A short paragraph (2-4 sentences) that expands the paradigm — what this concept actually is, why it matters, the key insight or mental model. Write like a dense knowledge note, not a summary.
 
-    try:
-        from google import genai
-        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-        )
-        return response.text.strip()
-
-    except Exception as e:
-        print(f"Warning: API call failed ({e}), using basic summary")
-        return transcript[:500] + "..." if len(transcript) > 500 else transcript
-
-def generate_deep_analysis(transcript: str, metadata: dict, url: str) -> str:
-    """Generate expert deep-dive markdown"""
-    print("[5/5] Generating deep analysis...")
-    
-    prompt = f"""You are an expert analyst. Given this reel transcript, create a comprehensive markdown wiki entry that:
-
-1. Expands concepts into deeper dimensions
-2. Provides context and background
-3. Identifies key themes and insights
-4. Adds expert commentary and implications
-5. Structures information hierarchically
-6. Cross-links related concepts
-
-Make it thorough like a Wikipedia article - not just transcript copy.
+3. "links": An array of objects with "label" and "url". Extract only real, usable references mentioned in the transcript — GitHub repos, specific tools, platforms, papers, websites. If no real URLs are mentioned, infer the most relevant resource URLs for the tools/frameworks discussed (e.g. if "LangChain" is mentioned, include {{"label": "LangChain", "url": "https://langchain.com"}}). Max 5 links.
 
 Metadata:
 - Title: {metadata.get('title', 'Unknown')}
 - Creator: {metadata.get('uploader', 'Unknown')}
-- Duration: {metadata.get('duration', 0)}s
 - Source: {url}
 
 Transcript:
 {transcript}
 
-Create comprehensive markdown wiki entry:"""
+Return only valid JSON, no markdown fences."""
 
     try:
         from google import genai
@@ -164,99 +97,61 @@ Create comprehensive markdown wiki entry:"""
             model="gemini-2.0-flash",
             contents=prompt,
         )
-        return response.text.strip()
+        text = response.text.strip()
+        # Strip markdown fences if model adds them anyway
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        return json.loads(text)
 
     except Exception as e:
-        print(f"Warning: API call failed ({e}), using basic format")
-        # Fallback: basic markdown
-        return f"""# {metadata.get('title', 'Reel Analysis')}
+        print(f"Warning: Gemini call failed ({e}), using fallback")
+        return {
+            "title": metadata.get("title", "Unknown reel"),
+            "wiki": transcript[:400] + ("..." if len(transcript) > 400 else ""),
+            "links": [],
+        }
 
-**Creator:** {metadata.get('uploader', 'Unknown')}  
-**Source:** {url}  
-**Duration:** {metadata.get('duration', 0)}s
 
-## Transcript
-
-{transcript}
-
-## Analysis
-
-*Deep analysis not available - API error*
-"""
-
-def save_outputs(summary: str, deep_md: str, metadata: dict, url: str):
-    """Save both outputs"""
+def save_output(data: dict, metadata: dict):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    title_slug = metadata.get('title', 'reel').replace(' ', '_')[:50]
-    
-    # Save summary
-    summary_file = OUTPUT_DIR / f"{timestamp}_{title_slug}_SUMMARY.txt"
-    with open(summary_file, 'w') as f:
-        f.write(f"REEL SUMMARY\n")
-        f.write(f"{'='*60}\n")
-        f.write(f"Title: {metadata.get('title', 'Unknown')}\n")
-        f.write(f"Creator: {metadata.get('uploader', 'Unknown')}\n")
-        f.write(f"Source: {url}\n")
-        f.write(f"{'='*60}\n\n")
-        f.write(summary)
-    
-    print(f"\n✓ Summary saved: {summary_file}")
-    
-    # Save deep analysis
-    wiki_file = OUTPUT_DIR / f"{timestamp}_{title_slug}_WIKI.md"
-    with open(wiki_file, 'w') as f:
-        f.write(deep_md)
-    
-    print(f"✓ Wiki saved: {wiki_file}")
+    out_file = OUTPUT_DIR / f"{timestamp}_output.json"
+    # Attach thumbnail so reelExtractor can use it
+    data["thumbnail"] = metadata.get("thumbnail", "")
+    with open(out_file, "w") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    print(f"\n✓ Output saved: {out_file}")
+    return out_file
+
 
 def cleanup_temp():
-    """Remove temp files"""
     for f in TEMP_DIR.glob("*"):
         f.unlink()
-    print("\n✓ Cleaned temp files")
+    print("✓ Cleaned temp files")
+
 
 def main():
     if len(sys.argv) < 2:
         print("Usage: python reel_to_wiki.py <reel_url>")
-        print("\nExample:")
-        print("  python reel_to_wiki.py https://instagram.com/reel/...")
         sys.exit(1)
-    
+
     url = sys.argv[1]
-    
-    print(f"\n{'='*60}")
-    print("REEL → WIKI PIPELINE")
-    print(f"{'='*60}\n")
-    print(f"Input: {url}\n")
-    
+    print(f"\n{'='*60}\nREEL → WIKI PIPELINE\n{'='*60}\nInput: {url}\n")
+
     try:
         setup_dirs()
-        
-        # Pipeline
         video_path = download_reel(url)
         audio_path = extract_audio(video_path)
-        transcript_data = transcribe_audio(audio_path)
+        transcript = transcribe_audio(audio_path)
         metadata = get_metadata(url)
-        
-        transcript = transcript_data["text"]
-        
-        # Dual output generation
-        summary = generate_summary(transcript, metadata)
-        deep_md = generate_deep_analysis(transcript, metadata, url)
-        
-        # Save
-        save_outputs(summary, deep_md, metadata, url)
-        
-        # Cleanup
+        data = generate_output(transcript, metadata, url)
+        save_output(data, metadata)
         cleanup_temp()
-        
-        print(f"\n{'='*60}")
-        print("✓ PIPELINE COMPLETE")
-        print(f"{'='*60}\n")
-        
+        print(f"\n{'='*60}\n✓ PIPELINE COMPLETE\n{'='*60}\n")
+
     except Exception as e:
         print(f"\n✗ ERROR: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

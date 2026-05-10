@@ -428,6 +428,26 @@ export default function Card({ item, onMarkRead, onArchive, onAssign, onUnassign
           </div>
         )}
 
+        {/* Reel reference links — chips rendered between wiki text and tags */}
+        {item.reel_links?.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {item.reel_links.map((link) => (
+              <a
+                key={link.url}
+                href={link.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded border border-[#27272a] hover:border-[#60a5fa] hover:text-[#60a5fa] transition-colors"
+                style={{ color: '#a1a1aa', backgroundColor: '#0f0f11' }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ExternalLink size={9} />
+                {link.label}
+              </a>
+            ))}
+          </div>
+        )}
+
         {/* Tags */}
         {(item.tags?.length > 0 || meta.label) && (
           <div className="flex flex-wrap gap-1.5 mt-2">
