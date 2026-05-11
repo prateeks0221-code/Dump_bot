@@ -1,18 +1,28 @@
-const { spawn } = require('child_process');
+/**
+ * Reel extractor — runs Python reel_to_wiki.py as subprocess.
+ *
+ * FIX: each run gets a UUID token. Python writes {token}_output.json.
+ * Node reads ONLY that token-scoped file — no shared "latest file" race.
+ *
+ * Serial queue prevents concurrent runs from mixing TEMP_DIR files (yt-dlp
+ * doesn't namespace its download directory). Token isolates the OUTPUT only.
+ */
+const { spawn }       = require('child_process');
 const { promises: fs } = require('fs');
-const path = require('path');
+const path            = require('path');
+const crypto          = require('crypto');
 const { patchEmptyFields, forceUpdateFields } = require('../notion/notionService');
-const logger = require('../../utils/logger');
+const logger          = require('../../utils/logger');
 
 const WIKI_DIR = path.join(process.cwd(), 'Context_extraction', 'wiki');
 const SCRIPT   = path.join(process.cwd(), 'Context_extraction', 'reel_to_wiki.py');
 
 const REEL_KINDS = new Set(['youtube', 'instagram', 'tiktok', 'twitter']);
 
-// Serial queue — prevents concurrent runs from mixing output files in WIKI_DIR
+// Serial queue — yt-dlp shares temp/ directory; only one run at a time
 let _queue = Promise.resolve();
 function enqueue(fn) {
-  _queue = _queue.then(fn, fn); // always advance queue even on error
+  _queue = _queue.then(fn, fn);
   return _queue;
 }
 
@@ -20,19 +30,15 @@ function isReelUrl(linkKind) {
   return REEL_KINDS.has(linkKind);
 }
 
-function spawnPython(bin, url) {
+function spawnPython(bin, args) {
   return new Promise((resolve, reject) => {
     let proc;
     try {
-      proc = spawn(bin, [SCRIPT, url], {
-        env: { ...process.env },
-        cwd: process.cwd(),
-      });
+      proc = spawn(bin, args, { env: { ...process.env }, cwd: process.cwd() });
     } catch (err) {
       return reject(err);
     }
     let stderr = '';
-    // Silence stream errors — unhandled stream 'error' events crash Node
     if (proc.stdin)  proc.stdin.on('error',  () => {});
     if (proc.stdout) proc.stdout.on('error', () => {});
     if (proc.stderr) {
@@ -47,32 +53,36 @@ function spawnPython(bin, url) {
   });
 }
 
-function runPython(url) {
-  const primaryBin = process.platform === 'win32' ? 'python' : 'python3';
-  const fallbackBin = process.platform === 'win32' ? 'python3' : 'python';
-
-  return spawnPython(primaryBin, url).catch((err) => {
+function runPython(url, token) {
+  const args = [SCRIPT, url, '--token', token];
+  const primary  = process.platform === 'win32' ? 'python'  : 'python3';
+  const fallback = process.platform === 'win32' ? 'python3' : 'python';
+  return spawnPython(primary, args).catch((err) => {
     if (err.code === 'ENOENT') {
-      logger.info(`reelExtractor: ${primaryBin} not found, trying ${fallbackBin}`);
-      return spawnPython(fallbackBin, url);
+      logger.info(`reelExtractor: ${primary} not found, trying ${fallback}`);
+      return spawnPython(fallback, args);
     }
     throw err;
   });
 }
 
-async function findLatestOutputFile() {
+async function readTokenOutput(token) {
   await fs.mkdir(WIKI_DIR, { recursive: true });
-  const files = await fs.readdir(WIKI_DIR);
-  const outputs = files.filter((f) => f.endsWith('_output.json')).sort().reverse();
-  if (!outputs.length) throw new Error('No output JSON found after extraction');
-  return path.join(WIKI_DIR, outputs[0]);
+  const outputPath = path.join(WIKI_DIR, `${token}_output.json`);
+  try {
+    const raw = await fs.readFile(outputPath, 'utf8');
+    return { data: JSON.parse(raw), outputPath };
+  } catch (err) {
+    throw new Error(`No output file for token ${token}: ${err.message}`);
+  }
 }
 
 async function _extractReel(url, notionPageId) {
-  logger.info(`reelExtractor: start ${url}`);
+  const token = crypto.randomUUID();
+  logger.info(`reelExtractor: start url=${url} token=${token}`);
 
   try {
-    await runPython(url);
+    await runPython(url, token);
   } catch (err) {
     if (err.code === 'ENOENT') {
       logger.warn(`reelExtractor: Python not available — skipping. Install python3+yt-dlp+ffmpeg+whisper.`);
@@ -81,43 +91,28 @@ async function _extractReel(url, notionPageId) {
     throw err;
   }
 
-  const outputPath = await findLatestOutputFile();
-  const raw = await fs.readFile(outputPath, 'utf8');
-  const data = JSON.parse(raw);
-
+  const { data, outputPath } = await readTokenOutput(token);
   const { title, wiki, links = [], thumbnail } = data;
 
-  // Determine platform label from URL
   let siteName = 'Reel';
-  if (/instagram\.com/i.test(url)) siteName = 'Instagram Reel';
+  if (/instagram\.com/i.test(url))       siteName = 'Instagram Reel';
   else if (/youtube\.com|youtu\.be/i.test(url)) siteName = 'YouTube';
-  else if (/tiktok\.com/i.test(url)) siteName = 'TikTok';
+  else if (/tiktok\.com/i.test(url))     siteName = 'TikTok';
   else if (/twitter\.com|x\.com/i.test(url)) siteName = 'Twitter/X';
 
   const patch = {};
-
-  // og_title → one-liner title (what is this reel about)
-  if (title) patch.og_title = { rich_text: [{ text: { content: title.slice(0, 2000) } }] };
-
-  // og_description → short wiki paragraph (renders as the description section on the card)
-  if (wiki) patch.og_description = { rich_text: [{ text: { content: wiki.slice(0, 2000) } }] };
-
-  // og_image → reel thumbnail
-  if (thumbnail) patch.og_image = { url: thumbnail };
-
-  // og_site → platform label (renders below title on the card)
+  if (title)      patch.og_title       = { rich_text: [{ text: { content: title.slice(0, 2000) } }] };
+  if (wiki)       patch.og_description = { rich_text: [{ text: { content: wiki.slice(0, 2000) } }] };
+  if (thumbnail)  patch.og_image       = { url: thumbnail };
   patch.og_site = { rich_text: [{ text: { content: siteName } }] };
-
-  // reel_links → JSON array of {label, url} for reference chips
   if (links.length > 0) {
     patch.reel_links = { rich_text: [{ text: { content: JSON.stringify(links).slice(0, 2000) } }] };
   }
 
-  // Force-write reel-derived fields (better quality than OG unfurl for video platforms)
   await forceUpdateFields(notionPageId, patch);
-  await fs.unlink(outputPath).catch(() => {});
+  await fs.unlink(outputPath).catch(() => {}); // cleanup token file
 
-  logger.info(`reelExtractor: done — patched ${Object.keys(patch).join(', ')}`);
+  logger.info(`reelExtractor: done token=${token} — patched ${Object.keys(patch).join(', ')}`);
   return { title, wiki, links };
 }
 

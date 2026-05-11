@@ -2,25 +2,28 @@
 """
 Reel → Wiki pipeline
 Download reel → transcribe → extract title, wiki, links via Gemini
-Output: single JSON file {title, wiki, links:[{label,url}]}
+
+Output: Context_extraction/wiki/{token}_output.json
+Token is mandatory (--token UUID) — ensures per-request file isolation.
 """
 
 import os
 import sys
 import subprocess
 import json
+import argparse
 from pathlib import Path
 import whisper
 from datetime import datetime
 
-TEMP_DIR = Path("./temp_reels")
-OUTPUT_DIR = Path("./wiki")
+TEMP_DIR   = Path("./Context_extraction/temp_reels")
+OUTPUT_DIR = Path("./Context_extraction/wiki")
 WHISPER_MODEL = "base"
 
 
 def setup_dirs():
-    TEMP_DIR.mkdir(exist_ok=True)
-    OUTPUT_DIR.mkdir(exist_ok=True)
+    TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def download_reel(url: str) -> Path:
@@ -59,11 +62,11 @@ def get_metadata(url: str) -> dict:
         with open(info_files[0]) as f:
             data = json.load(f)
             return {
-                "title": data.get("title", "Unknown"),
-                "uploader": data.get("uploader", "Unknown"),
+                "title":       data.get("title", "Unknown"),
+                "uploader":    data.get("uploader", "Unknown"),
                 "description": data.get("description", ""),
-                "duration": data.get("duration", 0),
-                "thumbnail": data.get("thumbnail", ""),
+                "duration":    data.get("duration", 0),
+                "thumbnail":   data.get("thumbnail", ""),
             }
     return {"title": "Unknown", "uploader": "Unknown", "thumbnail": ""}
 
@@ -98,7 +101,6 @@ Return only valid JSON, no markdown fences."""
             contents=prompt,
         )
         text = response.text.strip()
-        # Strip markdown fences if model adds them anyway
         if text.startswith("```"):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
         return json.loads(text)
@@ -107,15 +109,14 @@ Return only valid JSON, no markdown fences."""
         print(f"Warning: Gemini call failed ({e}), using fallback")
         return {
             "title": metadata.get("title", "Unknown reel"),
-            "wiki": transcript[:400] + ("..." if len(transcript) > 400 else ""),
+            "wiki":  transcript[:400] + ("..." if len(transcript) > 400 else ""),
             "links": [],
         }
 
 
-def save_output(data: dict, metadata: dict):
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_file = OUTPUT_DIR / f"{timestamp}_output.json"
-    # Attach thumbnail so reelExtractor can use it
+def save_output(data: dict, metadata: dict, token: str) -> Path:
+    """Write output to token-scoped file — guarantees no cross-request contamination."""
+    out_file = OUTPUT_DIR / f"{token}_output.json"
     data["thumbnail"] = metadata.get("thumbnail", "")
     with open(out_file, "w") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -125,26 +126,29 @@ def save_output(data: dict, metadata: dict):
 
 def cleanup_temp():
     for f in TEMP_DIR.glob("*"):
-        f.unlink()
+        try:
+            f.unlink()
+        except Exception:
+            pass
     print("✓ Cleaned temp files")
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python reel_to_wiki.py <reel_url>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="Reel → Wiki pipeline")
+    parser.add_argument("url",    help="Reel URL to process")
+    parser.add_argument("--token", required=True, help="UUID token for output file isolation")
+    args = parser.parse_args()
 
-    url = sys.argv[1]
-    print(f"\n{'='*60}\nREEL → WIKI PIPELINE\n{'='*60}\nInput: {url}\n")
+    print(f"\n{'='*60}\nREEL → WIKI PIPELINE\n{'='*60}\nInput: {args.url}\nToken: {args.token}\n")
 
     try:
         setup_dirs()
-        video_path = download_reel(url)
+        video_path = download_reel(args.url)
         audio_path = extract_audio(video_path)
         transcript = transcribe_audio(audio_path)
-        metadata = get_metadata(url)
-        data = generate_output(transcript, metadata, url)
-        save_output(data, metadata)
+        metadata   = get_metadata(args.url)
+        data       = generate_output(transcript, metadata, args.url)
+        save_output(data, metadata, args.token)
         cleanup_temp()
         print(f"\n{'='*60}\n✓ PIPELINE COMPLETE\n{'='*60}\n")
 

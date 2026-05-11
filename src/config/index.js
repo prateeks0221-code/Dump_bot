@@ -23,4 +23,7 @@ module.exports = {
     apiKey: process.env.GEMINI_API_KEY,
     enabled: process.env.GEMINI_ENABLED === 'true',
   },
+  portal: {
+    secret: process.env.PORTAL_SECRET || null,
+  },
 };
