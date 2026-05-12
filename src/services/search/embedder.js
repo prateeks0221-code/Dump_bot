@@ -40,32 +40,21 @@ async function embedText(text) {
 
 /**
  * Embed multiple strings. Returns array of Float32Array | null (same length as input).
- * Gemini batchEmbedContents processes up to 100 items.
+ * Uses individual embedContent calls with concurrency cap of 8 (rate-limit safe).
  */
 async function embedBatch(texts) {
   if (!texts.length) return [];
-  const ai = getClient();
 
-  // Process in chunks of 100
-  const CHUNK = 100;
-  const results = [];
+  const CONCURRENCY = 8;
+  const results = new Array(texts.length).fill(null);
 
-  for (let i = 0; i < texts.length; i += CHUNK) {
-    const chunk  = texts.slice(i, i + CHUNK);
-    try {
-      const res = await ai.models.batchEmbedContents({
-        model:    EMBED_MODEL,
-        requests: chunk.map((t) => ({
-          content: (t || '').slice(0, 2000),
-        })),
-      });
-      const embeddings = res?.embeddings || [];
-      for (const emb of embeddings) {
-        results.push(emb?.values ? new Float32Array(emb.values) : null);
-      }
-    } catch (err) {
-      logger.warn(`embedder: batch chunk failed — ${err.message}`);
-      for (let j = 0; j < chunk.length; j++) results.push(null);
+  for (let i = 0; i < texts.length; i += CONCURRENCY) {
+    const slice = texts.slice(i, i + CONCURRENCY);
+    const settled = await Promise.allSettled(
+      slice.map((t) => embedText(t))
+    );
+    for (let j = 0; j < settled.length; j++) {
+      results[i + j] = settled[j].status === 'fulfilled' ? settled[j].value : null;
     }
   }
   return results;
