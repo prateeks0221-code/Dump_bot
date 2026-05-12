@@ -109,90 +109,225 @@ function looksLikeMarkdown(item) {
 }
 
 /* ─── L2 Context modal ──────────────────────────────────────────── */
-function L2Modal({ item, onClose }) {
-  const [loading, setLoading] = useState(true);
-  const [insights, setInsights] = useState(null);
-  const [error, setError] = useState(null);
+function Chip({ children, color = '#a78bfa' }) {
+  return (
+    <span
+      className="inline-block text-[9px] font-mono px-1.5 py-0.5 rounded border"
+      style={{ color, borderColor: color + '44', backgroundColor: color + '11' }}
+    >
+      {children}
+    </span>
+  );
+}
 
-  // Fetch on mount
+function L2Section({ label, children }) {
+  return (
+    <div className="mb-3">
+      <div className="text-[9px] font-mono uppercase tracking-wider mb-1.5" style={{ color: '#52525b' }}>
+        {label}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function L2Modal({ item, onClose }) {
+  const [loading, setLoading]   = useState(true);
+  const [l2, setL2]             = useState(null);
+  const [error, setError]       = useState(null);
+
   useEffect(() => {
     let cancelled = false;
-    api.getL2(item.id, item.og_description || item.summary || item.raw_content)
-      .then((d) => { if (!cancelled) { setInsights(d.insights); setLoading(false); } })
+    api.getL2(item.id, item)
+      .then((d) => { if (!cancelled) { setL2(d); setLoading(false); } })
       .catch((e) => { if (!cancelled) { setError(e.message); setLoading(false); } });
     return () => { cancelled = true; };
-  }, [item.id, item.og_description, item.summary, item.raw_content]);
+  }, [item.id]);
+
+  const depthColor = { high: '#f87171', medium: '#fbbf24', low: '#4ade80' };
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.75)' }}
+      style={{ backgroundColor: 'rgba(0,0,0,0.80)' }}
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-md rounded-2xl border p-5"
-        style={{ backgroundColor: '#1a1a1e', borderColor: '#27272a' }}
+        className="relative w-full max-w-lg rounded-2xl border flex flex-col"
+        style={{ backgroundColor: '#1a1a1e', borderColor: '#27272a', maxHeight: '88vh' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b shrink-0" style={{ borderColor: '#27272a' }}>
           <div className="flex items-center gap-2">
-            <Sparkles size={14} style={{ color: '#a78bfa' }} />
-            <span className="text-[11px] font-mono uppercase tracking-widest" style={{ color: '#a78bfa' }}>
-              L2 Context
-            </span>
+            <Sparkles size={13} style={{ color: '#a78bfa' }} />
+            <span className="text-[11px] font-mono uppercase tracking-widest" style={{ color: '#a78bfa' }}>L2 Context</span>
+            {l2?.provider && !loading && (
+              <Chip color="#52525b">{l2.provider}</Chip>
+            )}
           </div>
           <button onClick={onClose} style={{ color: '#71717a' }} className="hover:text-white transition-colors">
-            <X size={16} />
+            <X size={15} />
           </button>
         </div>
 
-        {/* Source title */}
-        <div className="text-[12px] font-medium mb-3 line-clamp-2" style={{ color: '#e4e4e7' }}>
-          {item.og_title || item.title || '(untitled)'}
+        {/* Scrollable body */}
+        <div className="overflow-y-auto px-5 py-4 space-y-0 text-[11px]">
+
+          {/* Item title */}
+          <div className="text-[13px] font-medium mb-4 leading-snug" style={{ color: '#e4e4e7' }}>
+            {item.og_title || item.title || '(untitled)'}
+          </div>
+
+          {/* Loading */}
+          {loading && (
+            <div className="flex items-center gap-2 py-6 justify-center" style={{ color: '#71717a' }}>
+              <Loader2 size={14} className="animate-spin" />
+              <span className="font-mono">Analysing corpus…</span>
+            </div>
+          )}
+
+          {/* Error */}
+          {error && (
+            <p className="font-mono py-2" style={{ color: '#f87171' }}>{error}</p>
+          )}
+
+          {/* No LLM fallback */}
+          {!loading && l2?.l2_status === 'llm_unavailable' && (
+            <p className="font-mono py-2" style={{ color: '#fbbf24' }}>
+              All LLM providers unavailable. Add GROQ_API_KEY or OPENROUTER_API_KEY to .env for fallback.
+            </p>
+          )}
+
+          {/* No content */}
+          {!loading && l2?.l2_status === 'no_content' && (
+            <p className="font-mono py-2" style={{ color: '#71717a' }}>No extractable text in this item.</p>
+          )}
+
+          {/* Full L2 output */}
+          {!loading && l2?.semantic_summary && (
+            <>
+              {/* Semantic summary */}
+              <L2Section label="Summary">
+                <p className="leading-relaxed mb-1" style={{ color: '#d4d4d8' }}>
+                  {l2.semantic_summary.one_line}
+                </p>
+                {l2.semantic_summary.key_insight && (
+                  <div className="flex gap-2 mt-2 p-2.5 rounded-lg border border-[#27272a] bg-[#0f0f11]">
+                    <span style={{ color: '#a78bfa' }} className="shrink-0">◆</span>
+                    <span style={{ color: '#c4b5fd' }}>{l2.semantic_summary.key_insight}</span>
+                  </div>
+                )}
+              </L2Section>
+
+              {/* Content analysis */}
+              {l2.content_analysis && (
+                <L2Section label="Analysis">
+                  <div className="flex gap-2 flex-wrap mb-2">
+                    {l2.content_analysis.sentiment && (
+                      <Chip color="#71717a">{l2.content_analysis.sentiment}</Chip>
+                    )}
+                    {l2.content_analysis.technical_depth && (
+                      <Chip color={depthColor[l2.content_analysis.technical_depth] || '#71717a'}>
+                        depth: {l2.content_analysis.technical_depth}
+                      </Chip>
+                    )}
+                    {l2.raw_extractions?.word_count > 0 && (
+                      <Chip color="#52525b">{l2.raw_extractions.word_count} words</Chip>
+                    )}
+                  </div>
+                  {l2.content_analysis.actionable_items?.length > 0 && (
+                    <div className="space-y-1">
+                      {l2.content_analysis.actionable_items.slice(0, 4).map((a, i) => (
+                        <div key={i} className="flex gap-2 items-start" style={{ color: '#a1a1aa' }}>
+                          <span style={{ color: '#4ade80' }} className="shrink-0 mt-0.5">→</span>
+                          {a}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </L2Section>
+              )}
+
+              {/* Entities */}
+              {l2.entities?.length > 0 && (
+                <L2Section label="Entities">
+                  <div className="flex flex-wrap gap-1.5">
+                    {l2.entities.slice(0, 10).map((e, i) => {
+                      const typeColor = {
+                        person: '#60a5fa', org: '#34d399', tech: '#f59e0b',
+                        concept: '#a78bfa', tool: '#fb923c', place: '#38bdf8',
+                      }[e.type] || '#71717a';
+                      return (
+                        <span key={i} className="flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded border"
+                          style={{ borderColor: typeColor + '44', color: typeColor, backgroundColor: typeColor + '11' }}>
+                          {e.name}
+                          <span style={{ opacity: 0.5 }}>({e.type})</span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                </L2Section>
+              )}
+
+              {/* Relationships */}
+              {l2.relationships?.length > 0 && (
+                <L2Section label="Relationships">
+                  <div className="space-y-1">
+                    {l2.relationships.slice(0, 4).map((r, i) => (
+                      <div key={i} className="flex items-center gap-1.5 flex-wrap" style={{ color: '#a1a1aa' }}>
+                        <span style={{ color: '#60a5fa' }}>{r.source}</span>
+                        <span style={{ color: '#52525b' }}>→{r.relation}→</span>
+                        <span style={{ color: '#34d399' }}>{r.target}</span>
+                        {r.confidence && (
+                          <span className="text-[9px] font-mono" style={{ color: '#52525b' }}>
+                            {Math.round(r.confidence * 100)}%
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </L2Section>
+              )}
+
+              {/* Embedded links discovered */}
+              {l2.embedded_links_discovered?.length > 0 && (
+                <L2Section label="Links Discovered">
+                  <div className="space-y-1">
+                    {l2.embedded_links_discovered.slice(0, 6).map((lnk, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <Chip color="#71717a">{lnk.link_type}</Chip>
+                        <a
+                          href={lnk.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="truncate hover:underline"
+                          style={{ color: '#60a5fa', maxWidth: '280px' }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {lnk.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 60)}
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                </L2Section>
+              )}
+
+              {/* Knowledge gaps */}
+              {l2.content_analysis?.knowledge_gaps?.length > 0 && (
+                <L2Section label="Knowledge Gaps">
+                  <div className="space-y-1">
+                    {l2.content_analysis.knowledge_gaps.slice(0, 3).map((g, i) => (
+                      <div key={i} className="flex gap-2 items-start" style={{ color: '#71717a' }}>
+                        <span style={{ color: '#fbbf24' }} className="shrink-0">?</span>{g}
+                      </div>
+                    ))}
+                  </div>
+                </L2Section>
+              )}
+            </>
+          )}
         </div>
-
-        {/* OG description — the raw input */}
-        {(item.og_description || item.summary) && (
-          <div className="text-[11px] leading-relaxed mb-4 p-3 rounded-lg border border-[#27272a] bg-[#0f0f11]" style={{ color: '#71717a' }}>
-            <span className="text-[9px] font-mono uppercase tracking-wider text-[#52525b] block mb-1">Source description</span>
-            {(item.og_description || item.summary).slice(0, 300)}
-          </div>
-        )}
-
-        {/* Gemini insights */}
-        {loading && (
-          <div className="flex items-center gap-2 py-4 justify-center" style={{ color: '#71717a' }}>
-            <Loader2 size={14} className="animate-spin" />
-            <span className="text-[11px] font-mono">Framing context…</span>
-          </div>
-        )}
-
-        {error && (
-          <p className="text-[11px] font-mono py-2" style={{ color: '#f87171' }}>
-            {error}
-          </p>
-        )}
-
-        {insights && (
-          <div className="space-y-2">
-            <span className="text-[9px] font-mono uppercase tracking-wider block mb-2" style={{ color: '#52525b' }}>
-              Semantic insights
-            </span>
-            {insights.map((insight, i) => (
-              <div key={i} className="flex gap-2.5 items-start text-[12px] leading-relaxed" style={{ color: '#d4d4d8' }}>
-                <span className="mt-0.5 shrink-0 text-[10px]" style={{ color: '#a78bfa' }}>◆</span>
-                {insight}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {!loading && !error && !insights && (
-          <p className="text-[11px] font-mono py-2" style={{ color: '#71717a' }}>
-            No insights generated — check Gemini quota.
-          </p>
-        )}
       </div>
     </div>
   );
@@ -476,23 +611,23 @@ export default function Card({ item, onMarkRead, onArchive, onAssign, onUnassign
           </a>
         )}
 
-        {/* Description + L2 button */}
+        {/* Description */}
         {desc && !isInstagram && !isTwitter && (
-          <div className="mb-2">
-            <p className="text-[11px] leading-relaxed line-clamp-3" style={{ color: '#a1a1aa' }}>
-              {desc}
-            </p>
-            <button
-              onClick={() => setShowL2(true)}
-              className="inline-flex items-center gap-1 text-[10px] font-mono mt-1.5 px-2 py-0.5 rounded-md border transition-colors hover:border-[#a78bfa] hover:text-[#a78bfa]"
-              style={{ borderColor: '#27272a', color: '#71717a', backgroundColor: '#0f0f11' }}
-              title="Generate L2 semantic context via Gemini"
-            >
-              <Sparkles size={9} />
-              L2 Context
-            </button>
-          </div>
+          <p className="text-[11px] leading-relaxed mb-2 line-clamp-3" style={{ color: '#a1a1aa' }}>
+            {desc}
+          </p>
         )}
+
+        {/* L2 button — all items, no gate */}
+        <button
+          onClick={() => setShowL2(true)}
+          className="inline-flex items-center gap-1 text-[10px] font-mono mb-2 px-2 py-0.5 rounded-md border transition-colors hover:border-[#a78bfa] hover:text-[#a78bfa]"
+          style={{ borderColor: '#27272a', color: '#71717a', backgroundColor: '#0f0f11' }}
+          title="Generate L2 semantic context"
+        >
+          <Sparkles size={9} />
+          L2
+        </button>
 
         {/* Raw text / notes / markdown */}
         {(isText || isMarkdown || (isLinkedIn && !desc)) && raw && (

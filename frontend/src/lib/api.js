@@ -68,8 +68,8 @@ export const api = {
   getWall:      () => jget('/api/wall'),
   toggleBasket: (id, in_basket) => jsend('PATCH', `/api/wall/${id}/basket`, { in_basket }),
 
-  // L2 context (Gemini semantic framing of og_description)
-  getL2: (id, og_description) => jsend('POST', `/api/desk/items/${id}/l2`, { og_description }),
+  // L2 context — full structured analysis from all item fields
+  getL2: (id, item) => jsend('POST', `/api/desk/items/${id}/l2`, { item }),
 
   // Search
   search: (q, { limit = 20 } = {}) => jget(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}`),

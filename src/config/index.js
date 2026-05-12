@@ -26,4 +26,10 @@ module.exports = {
   portal: {
     secret: process.env.PORTAL_SECRET || null,
   },
+  // Optional LLM fallback cascade keys (all free-tier capable)
+  llm: {
+    groqKey:       process.env.GROQ_API_KEY       || null,
+    cerebrasKey:   process.env.CEREBRAS_API_KEY   || null,
+    openrouterKey: process.env.OPENROUTER_API_KEY || null,
+  },
 };

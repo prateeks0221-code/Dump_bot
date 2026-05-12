@@ -4,7 +4,7 @@ const { getDrive } = require('../../services/drive/driveClient');
 const config = require('../../config');
 const { enrichLink } = require('../../services/link/linkService');
 const { patchEmptyFields } = require('../../services/notion/notionService');
-const { generateL2Context } = require('../../services/ai/aiService');
+const { generateL2 } = require('../../services/ai/l2Service');
 
 // In-memory L2 cache — keyed by item ID
 const l2Cache = new Map();
@@ -140,28 +140,32 @@ router.post('/items/:id/unfurl', async (req, res) => {
   }
 });
 
-// POST /api/desk/items/:id/l2 — generate L2 context from og_description via Gemini
+// POST /api/desk/items/:id/l2 — generate full structured L2 context from all item fields
 router.post('/items/:id/l2', async (req, res) => {
   try {
     const { id } = req.params;
-    const { og_description } = req.body;
-
-    if (!og_description) return res.status(400).json({ error: 'og_description required' });
 
     // Serve cached result immediately
-    if (l2Cache.has(id)) return res.json({ insights: l2Cache.get(id), cached: true });
+    if (l2Cache.has(id)) return res.json({ ...l2Cache.get(id), cached: true });
 
-    const insights = await generateL2Context(og_description);
-    if (!insights) return res.json({ insights: null, error: 'Gemini unavailable or quota exceeded' });
+    // Caller passes full item fields; fall back to fetching from Notion if not provided
+    let item = req.body?.item;
+    if (!item || !item.id) {
+      // Fetch from Notion to build corpus
+      const notion  = getNotion();
+      const page    = await notion.pages.retrieve({ page_id: id });
+      item          = normalizeItem(page);
+    }
 
-    l2Cache.set(id, insights);
-    // Evict cache entries when map grows large
+    const l2 = await generateL2(item);
+
+    l2Cache.set(id, l2);
     if (l2Cache.size > 1000) {
       const firstKey = l2Cache.keys().next().value;
       l2Cache.delete(firstKey);
     }
 
-    res.json({ insights });
+    res.json(l2);
   } catch (err) {
     logger.error(`POST /api/desk/items/${req.params.id}/l2 error: ${err.message}`);
     res.status(500).json({ error: err.message });
