@@ -96,4 +96,52 @@ async function getPageTitle(pageId) {
   }
 }
 
-module.exports = { findByMessageId, createEntry, patchEmptyFields, getRecentlyUpdatedEntries, extractStoryName, getPageTitle };
+function markdownToBlocks(md) {
+  const blocks = [];
+  for (const line of md.split('\n')) {
+    const t = line.trim();
+    if (!t) continue;
+    if (t.startsWith('### ')) {
+      blocks.push({ type: 'heading_3', heading_3: { rich_text: [{ text: { content: t.slice(4, 2004) } }] } });
+    } else if (t.startsWith('## ')) {
+      blocks.push({ type: 'heading_2', heading_2: { rich_text: [{ text: { content: t.slice(3, 2003) } }] } });
+    } else if (t.startsWith('# ')) {
+      blocks.push({ type: 'heading_1', heading_1: { rich_text: [{ text: { content: t.slice(2, 2002) } }] } });
+    } else if (t.startsWith('- ') || t.startsWith('* ')) {
+      blocks.push({ type: 'bulleted_list_item', bulleted_list_item: { rich_text: [{ text: { content: t.slice(2, 2002) } }] } });
+    } else {
+      blocks.push({ type: 'paragraph', paragraph: { rich_text: [{ text: { content: t.slice(0, 2000) } }] } });
+    }
+  }
+  return blocks;
+}
+
+async function createWikiPage(parentPageId, title, markdownContent) {
+  const notion = getNotion();
+  const blocks = markdownToBlocks(markdownContent);
+
+  const page = await notion.pages.create({
+    parent: { page_id: parentPageId },
+    properties: {
+      title: { title: [{ text: { content: (title || 'Wiki').slice(0, 2000) } }] },
+    },
+    children: blocks.slice(0, 100),
+  });
+
+  for (let i = 100; i < blocks.length; i += 100) {
+    await notion.blocks.children.append({ block_id: page.id, children: blocks.slice(i, i + 100) });
+  }
+
+  logger.info(`Notion: created wiki sub-page ${page.id} under ${parentPageId}`);
+  return page.id;
+}
+
+// Force-write specific fields regardless of current value
+async function forceUpdateFields(pageId, updates) {
+  if (Object.keys(updates).length === 0) return;
+  const notion = getNotion();
+  await notion.pages.update({ page_id: pageId, properties: updates });
+  logger.info(`Notion: force-updated ${pageId}: ${Object.keys(updates).join(', ')}`);
+}
+
+module.exports = { findByMessageId, createEntry, patchEmptyFields, forceUpdateFields, getRecentlyUpdatedEntries, extractStoryName, getPageTitle, createWikiPage };

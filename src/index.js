@@ -7,18 +7,29 @@ const healthRoutes = require('./routes/health');
 const deskRoutes = require('./routes/desk');
 const deskApiRoutes = require('./routes/api/desk');
 const storiesApiRoutes = require('./routes/api/stories');
+const wallApiRoutes = require('./routes/api/wall');
 const { setWebhook } = require('./services/telegram/telegramClient');
 const { startPoller } = require('./services/notion/notionPoller');
+const searchApiRoutes = require('./routes/api/search');
+const { startIndexer } = require('./services/search/searchIndex');
+
+const { portalAuth } = require('./middleware/auth');
 
 const app = express();
 
 app.use(express.json());
 app.use(express.static('public'));
-app.use('/telegram', telegramRoutes);
-app.use('/desk', deskRoutes);
-app.use('/api/desk', deskApiRoutes);
-app.use('/api/stories', storiesApiRoutes);
-app.use('/', healthRoutes);
+
+// Public routes — no auth
+app.use('/telegram', telegramRoutes);  // Telegram webhook must stay public
+app.use('/desk', deskRoutes);          // SPA shell
+app.use('/', healthRoutes);            // /health for Railway
+
+// Protected routes — require PORTAL_SECRET token
+app.use('/api/desk', portalAuth, deskApiRoutes);
+app.use('/api/stories', portalAuth, storiesApiRoutes);
+app.use('/api/wall', portalAuth, wallApiRoutes);
+app.use('/api/search', portalAuth, searchApiRoutes);
 
 app.use((err, req, res, next) => {
   logger.error(`Unhandled error: ${err.message}`, err);
@@ -39,6 +50,7 @@ async function bootstrap() {
   }
 
   startPoller();
+  startIndexer(); // build search index in background
 }
 
 bootstrap().catch((err) => {
