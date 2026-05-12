@@ -1,7 +1,7 @@
 /**
- * Gemini text-embedding-004 wrapper.
- * Returns Float32Array of 768 dims per input string.
- * Batches up to 100 texts per API call.
+ * Gemini gemini-embedding-001 wrapper.
+ * Returns Float32Array of 3072 dims per input string.
+ * Concurrent batching — 8 parallel calls per round.
  */
 const logger = require('../../utils/logger');
 
@@ -16,20 +16,23 @@ function getClient() {
   return _genai;
 }
 
-const EMBED_MODEL = 'text-embedding-004';
+// gemini-embedding-001 is the stable embedding model available via @google/genai SDK v1.x
+// text-embedding-004 is NOT accessible via this SDK (v1beta endpoint only, different SDK)
+const EMBED_MODEL = 'gemini-embedding-001';
 
 /**
- * Embed a single string. Returns Float32Array (768 dims) or null on failure.
+ * Embed a single string. Returns Float32Array (3072 dims) or null on failure.
  */
 async function embedText(text) {
   if (!text || typeof text !== 'string') return null;
   try {
     const ai     = getClient();
     const result = await ai.models.embedContent({
-      model:   EMBED_MODEL,
-      content: text.slice(0, 2000), // Gemini embed limit
+      model:    EMBED_MODEL,
+      contents: text.slice(0, 2000), // 'contents' param, not 'content'
     });
-    const values = result?.embedding?.values;
+    // SDK v1.x: result.embeddings[0].values
+    const values = result?.embeddings?.[0]?.values;
     if (!values) return null;
     return new Float32Array(values);
   } catch (err) {
